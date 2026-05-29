@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en"><head><title>Control Panel - Hunt group administration</title></head>
+<body>
+<form action="/phonedivert/huntgroup/update" method="post" id="auto-form">
+
+<div class="row w-100">
+  <div class="col-md-3">
+    <p>Name</p>
+    <input type="text" class="form-control" name="hg-name" size="25" value="New Rota" />
+    <input type="hidden" name="hg-id" value="157626" />
+  </div>
+
+  <div class="col-md-3">
+    <p>Announcement</p>
+    <select class="form-control form-select input-large greeting-select-box" name="greeting" id="greeting">
+      <option value="none">None</option>
+      <option value="d3e375bb-3e02-11ef-bc41-8d939410b5e5">AI-Answerphone 2 </option>
+      <option value="b86063fa-38a0-11ef-bec4-e1f285c7589f">AI-Answerphone Message</option>
+      <option value="dcbc6a61-b256-11eb-8b58-ac281572e7f5">CW - Western Service Office</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <p>Voicemail</p>
+    <select class="form-control form-select input-large" name="voicemail" id="voicemail">
+      <option value="none">None</option>
+      <option value="20042" selected="selected">Voice to Email</option>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <p>Hunting type</p>
+    <select class="form-control form-select" name="hunting">
+      <option value="inorder" selected="selected">Hunt in-order</option>
+      <option value="random">Random hunt</option>
+      <option value="last">Last found</option>
+      <option value="mostidle">Most idle</option>
+      <option value="rotary">Rotary</option>
+      <option value="simultaneous">Simultaneous Ring All</option>
+    </select>
+  </div>
+</div>
+
+<table id="huntingconfig" class="table">
+<thead>
+<tr><th colspan="2" rowspan="2">&nbsp;</th><th colspan="9">Enable on which days?</th><th rowspan="2">VM</th><th rowspan="2">Divert my calls to:</th><th rowspan="2">Comment</th><th rowspan="2">Timeout</th><th rowspan="2">Active</th><th rowspan="2">&nbsp;</th></tr>
+<tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th><th>Start time</th><th>End time</th></tr>
+</thead>
+<tbody>
+
+<tr class="huntdest">
+  <td class="updown"></td>
+  <td class="order"><input type="hidden" name="1_order"/>1</td>
+  <td><input type="checkbox" name="1_sun"/></td>
+  <td><input type="checkbox" name="1_mon" checked="checked"/></td>
+  <td><input type="checkbox" name="1_tue"/></td>
+  <td><input type="checkbox" name="1_wed"/></td>
+  <td><input type="checkbox" name="1_thu"/></td>
+  <td><input type="checkbox" name="1_fri"/></td>
+  <td><input type="checkbox" name="1_sat"/></td>
+  <td><input type="time" class="form-control" name="1_start" size="5" value="00:00" /></td>
+  <td><input type="time" class="form-control" name="1_end"   size="5" value="10:00" /></td>
+  <td><input type="checkbox" name="1_vm" checked="checked"/></td>
+  <td><input type="checkbox" name="1_q" /></td>
+  <td><input type="text" class="form-control search" name="1_destination"  placeholder="Destination" size="13" value="voicemail" /></td>
+  <td><input type="text" class="form-control" name="1_description" value="" /></td>
+  <td><input type="number" class="form-control" min="5" max="180" name="1_timeout" size="3" value="90"/></td>
+  <td><input type="checkbox" name="1_enabled" checked="checked" /></td>
+  <td><button type="button" class="delete btn btn-danger btn-red" id="1_delete" name="1_delete">Delete</button></td>
+</tr>
+
+<tr class="huntdest">
+  <td class="updown"></td>
+  <td class="order"><input type="hidden" name="2_order"/>2</td>
+  <td><input type="checkbox" name="2_sun"/></td>
+  <td><input type="checkbox" name="2_mon" checked="checked"/></td>
+  <td><input type="checkbox" name="2_tue"/></td>
+  <td><input type="checkbox" name="2_wed"/></td>
+  <td><input type="checkbox" name="2_thu"/></td>
+  <td><input type="checkbox" name="2_fri"/></td>
+  <td><input type="checkbox" name="2_sat"/></td>
+  <td><input type="time" class="form-control" name="2_start" size="5" value="10:00" /></td>
+  <td><input type="time" class="form-control" name="2_end"   size="5" value="14:00" /></td>
+  <td><input type="checkbox" name="2_vm"/></td>
+  <td><input type="checkbox" name="2_q" /></td>
+  <td><input type="text" class="form-control search" name="2_destination"  placeholder="Destination" size="13" value="01454 898476" /></td>
+  <td><input type="text" class="form-control" name="2_description" value="Steve C" /></td>
+  <td><input type="number" class="form-control" min="5" max="180" name="2_timeout" size="3" value="90"/></td>
+  <td><input type="checkbox" name="2_enabled" checked="checked" /></td>
+  <td><button type="button" class="delete btn btn-danger btn-red" id="2_delete" name="2_delete">Delete</button></td>
+</tr>
+
+<tr class="huntdest">
+  <td class="updown"></td>
+  <td class="order"><input type="hidden" name="3_order"/>3</td>
+  <td><input type="checkbox" name="3_sun"/></td>
+  <td><input type="checkbox" name="3_mon" checked="checked"/></td>
+  <td><input type="checkbox" name="3_tue"/></td>
+  <td><input type="checkbox" name="3_wed"/></td>
+  <td><input type="checkbox" name="3_thu"/></td>
+  <td><input type="checkbox" name="3_fri"/></td>
+  <td><input type="checkbox" name="3_sat"/></td>
+  <td><input type="time" class="form-control" name="3_start" size="5" value="14:00" /></td>
+  <td><input type="time" class="form-control" name="3_end"   size="5" value="18:00" /></td>
+  <td><input type="checkbox" name="3_vm"/></td>
+  <td><input type="checkbox" name="3_q" /></td>
+  <td><input type="text" class="form-control search" name="3_destination"  placeholder="Destination" size="13" value="07775 513635" /></td>
+  <td><input type="text" class="form-control" name="3_description" value="Alan F" /></td>
+  <td><input type="number" class="form-control" min="5" max="180" name="3_timeout" size="3" value="90"/></td>
+  <td><input type="checkbox" name="3_enabled" checked="checked" /></td>
+  <td><button type="button" class="delete btn btn-danger btn-red" id="3_delete" name="3_delete">Delete</button></td>
+</tr>
+
+<tr class="huntdest">
+  <td class="updown"></td>
+  <td class="order"><input type="hidden" name="4_order"/>4</td>
+  <td><input type="checkbox" name="4_sun"/></td>
+  <td><input type="checkbox" name="4_mon"/></td>
+  <td><input type="checkbox" name="4_tue"/></td>
+  <td><input type="checkbox" name="4_wed"/></td>
+  <td><input type="checkbox" name="4_thu" checked="checked"/></td>
+  <td><input type="checkbox" name="4_fri"/></td>
+  <td><input type="checkbox" name="4_sat"/></td>
+  <td><input type="time" class="form-control" name="4_start" size="5" value="18:00" /></td>
+  <td><input type="time" class="form-control" name="4_end"   size="5" value="22:00" /></td>
+  <td><input type="checkbox" name="4_vm"/></td>
+  <td><input type="checkbox" name="4_q" /></td>
+  <td><input type="text" class="form-control search" name="4_destination"  placeholder="Destination" size="13" value="07931 901060" /></td>
+  <td><input type="text" class="form-control" name="4_description" value="Jo W" /></td>
+  <td><input type="number" class="form-control" min="5" max="180" name="4_timeout" size="3" value="60"/></td>
+  <td><input type="checkbox" name="4_enabled"/></td>
+  <td><button type="button" class="delete btn btn-danger btn-red" id="4_delete" name="4_delete">Delete</button></td>
+</tr>
+
+</tbody>
+</table>
+</form>
+</body>
+</html>

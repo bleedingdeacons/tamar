@@ -1,0 +1,17 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 5
+    paths:
+        - src
+    excludePaths:
+        - tests
+    bootstrapFiles:
+        - vendor/autoload.php
+    stubFiles:
+        # Add custom stub files here if needed
+    ignoreErrors:
+        # WordPress functions that PHPStan doesn't recognize
+        - '#Function get_plugin_data not found#'
+        - '#Function dbDelta not found#'
