@@ -40,6 +40,13 @@ final class SettingsPage
 {
     use \Tamar\Logger\HasLogger;
 
+    /** Top-level menu slug — a container only, with no page of its own. */
+    private const MENU_SLUG = 'tamar';
+
+    /** Distinct slugs per page — each must differ from MENU_SLUG to render as a child. */
+    private const OVERVIEW_SLUG = 'tamar-overview';
+    private const SETTINGS_SLUG = 'tamar-settings';
+
     public function __construct(private ContainerInterface $container)
     {
     }
@@ -54,58 +61,107 @@ final class SettingsPage
 
     public function addMenu(): void
     {
-        // Top-level menu entry for Tamar. We register the page slug
-        // ('tamar') as both the menu and its first submenu so the
-        // submenu label reads "Settings" rather than repeating the
-        // top-level "Tamar" title.
+        // Top-level entry is a *container* only — its callback is
+        // __return_null and it has no page of its own. Each real page
+        // is a submenu with its OWN distinct slug. (The previous code
+        // gave the submenu the same slug as the parent, which collapses
+        // to a single link in some WP setups and hides the "Settings"
+        // child — Sentinel's menu works precisely because it avoids that.)
         add_menu_page(
             __('Tamar — Call Forwarding', 'tamar'),
             __('Tamar', 'tamar'),
             'beacon_view_forwarding',
-            'tamar',
-            [$this, 'render'],
+            self::MENU_SLUG,
+            '__return_null',
             'dashicons-phone',
             58
         );
 
         add_submenu_page(
-            'tamar',
-            __('Tamar — Call Forwarding', 'tamar'),
+            self::MENU_SLUG,
+            __('Tamar — Forwarding overview', 'tamar'),
+            __('Overview', 'tamar'),
+            'beacon_view_forwarding',
+            self::OVERVIEW_SLUG,
+            [$this, 'renderOverview']
+        );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Tamar — Settings', 'tamar'),
             __('Settings', 'tamar'),
             'beacon_view_forwarding',
-            'tamar',
-            [$this, 'render']
+            self::SETTINGS_SLUG,
+            [$this, 'renderSettings']
         );
+
+        // add_menu_page auto-creates a first submenu that duplicates the
+        // parent label ("Tamar") and points at the empty container page.
+        // Strip it after every admin_menu callback has registered, so the
+        // only visible child is "Settings".
+        add_action('admin_menu', [$this, 'removeDuplicateSubmenu'], 999);
     }
 
-    public function render(): void
+    /**
+     * Remove the auto-generated first submenu whose slug equals the
+     * parent menu slug, leaving just the real "Settings" page.
+     */
+    public function removeDuplicateSubmenu(): void
+    {
+        global $submenu;
+
+        if (empty($submenu[self::MENU_SLUG])) {
+            return;
+        }
+
+        foreach ($submenu[self::MENU_SLUG] as $index => $item) {
+            // $item[2] is the submenu slug; the auto entry reuses the parent slug.
+            if (isset($item[2]) && $item[2] === self::MENU_SLUG) {
+                unset($submenu[self::MENU_SLUG][$index]);
+                break;
+            }
+        }
+    }
+
+    public function renderOverview(): void
     {
         if (!current_user_can('beacon_view_forwarding')) {
             wp_die(esc_html__('You do not have permission to view this page.', 'tamar'));
         }
 
-        $settings = TamarSettings::load();
-        $notice = $this->consumeFlash();
+        echo '<div class="wrap">';
+        echo '<h1>' . esc_html__('Tamar — Forwarding overview', 'tamar') . '</h1>';
+        $this->renderFlashNotice();
+        $this->renderStatePanel();
+        echo '</div>';
+    }
+
+    public function renderSettings(): void
+    {
+        if (!current_user_can('beacon_view_forwarding')) {
+            wp_die(esc_html__('You do not have permission to view this page.', 'tamar'));
+        }
 
         echo '<div class="wrap">';
-        echo '<h1>' . esc_html__('Tamar — Call Forwarding', 'tamar') . '</h1>';
+        echo '<h1>' . esc_html__('Tamar — Settings', 'tamar') . '</h1>';
+        $this->renderFlashNotice();
+        $this->renderSettingsForm(TamarSettings::load());
+        echo '</div>';
+    }
 
+    private function renderFlashNotice(): void
+    {
+        $notice = $this->consumeFlash();
         if ($notice !== null) {
             echo '<div class="notice notice-' . esc_attr($notice['type']) . ' is-dismissible"><p>'
                 . esc_html($notice['message']) . '</p></div>';
         }
-
-        $this->renderStatePanel();
-        $this->renderSettingsForm($settings);
-
-        echo '</div>';
     }
 
     private function renderSettingsForm(array $settings): void
     {
         $canEdit = current_user_can('beacon_manage_forwarding');
         $disabled = $canEdit ? '' : ' disabled';
-        echo '<hr>';
         echo '<h2>' . esc_html__('Upstream connection', 'tamar') . '</h2>';
         if (!$canEdit) {
             echo '<p><em>' . esc_html__('Read-only — your role can view but not change these settings.', 'tamar') . '</em></p>';
@@ -215,7 +271,7 @@ final class SettingsPage
 
         TamarSettings::save($_POST);
         $this->setFlash('success', __('Tamar settings saved.', 'tamar'));
-        $this->redirectBack();
+        $this->redirectTo(self::SETTINGS_SLUG);
     }
 
     public function handleTest(): void
@@ -234,7 +290,7 @@ final class SettingsPage
             $this->setFlash('error', __('Connection failed: ', 'tamar') . $e->getMessage());
         }
 
-        $this->redirectBack();
+        $this->redirectTo(self::SETTINGS_SLUG);
     }
 
     public function handleCommit(): void
@@ -253,7 +309,7 @@ final class SettingsPage
             $this->setFlash('error', __('Commit failed: ', 'tamar') . $e->getMessage());
         }
 
-        $this->redirectBack();
+        $this->redirectTo(self::OVERVIEW_SLUG);
     }
 
     /**
@@ -283,9 +339,9 @@ final class SettingsPage
         return 'tamar_flash_' . get_current_user_id();
     }
 
-    private function redirectBack(): void
+    private function redirectTo(string $slug): void
     {
-        wp_safe_redirect(admin_url('admin.php?page=tamar'));
+        wp_safe_redirect(admin_url('admin.php?page=' . $slug));
         exit;
     }
 }
