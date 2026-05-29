@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Plugin Name: Tamar
  * Description: Beacon driver for Tamar Telecommunications' control panel. Implements Beacon's CallForwardingService contract by reading and writing the hunt-group editor at /phonedivert/huntgroup. Requires the Beacon plugin to be installed and active.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Requires at least: 6.1
  * Requires PHP: 8.1
  * Requires Plugins: beacon
@@ -34,6 +34,10 @@ define('TAMAR_VERSION', $tamar_plugin_data['Version']);
 define('TAMAR_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TAMAR_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TAMAR_PLUGIN_FILE', __FILE__);
+
+// Single wp_options key that holds the whole settings row. Must match
+// the key deleted in uninstall.php ('tamar_settings').
+define('TAMAR_OPTION_KEY', 'tamar_settings');
 
 // Load Composer autoloader if present.
 $tamar_autoloader = TAMAR_PLUGIN_DIR . 'vendor/autoload.php';

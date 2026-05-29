@@ -87,6 +87,18 @@ class PluginBuilder
 
         // Build script
             'build.php',
+
+        // ==== VENDOR DEV PACKAGES NOT NEEDED IN DEV BUILD ====
+        // These are dev tools, not needed to run/test the plugin
+            'vendor/bin',
+            'vendor/phpstan',
+
+        // Vendor unnecessary files
+            'vendor/*/.git',
+            'vendor/*/.github',
+            'vendor/*/*/.github',
+            'vendor/*/doc',
+            'vendor/*/docs',
     ];
 
     // Files and directories to exclude in dev builds

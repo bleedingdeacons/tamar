@@ -1,0 +1,23 @@
+# Composer
+/vendor/
+composer.lock
+
+# Build artifacts
+/build/
+
+# PHPUnit
+.phpunit.cache/
+.phpunit.result.cache
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
