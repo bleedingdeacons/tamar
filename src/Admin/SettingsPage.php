@@ -194,51 +194,7 @@ final class SettingsPage
             return;
         }
 
-        echo '<h3>' . esc_html__('Targets', 'tamar') . ' <span style="font-weight:normal; color:#666;">(' . count($targets) . ')</span></h3>';
-        if ($targets === []) {
-            echo '<p>' . esc_html__('No targets reported by the upstream.', 'tamar') . '</p>';
-        } else {
-            echo '<table class="widefat striped"><thead><tr>';
-            echo '<th>' . esc_html__('ID', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Label', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Kind', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Address', 'tamar') . '</th>';
-            echo '</tr></thead><tbody>';
-            foreach ($targets as $target) {
-                echo '<tr>';
-                echo '<td><code>' . esc_html($target->getId()) . '</code></td>';
-                echo '<td>' . esc_html($target->getLabel()) . '</td>';
-                echo '<td>' . esc_html($target->getKind()) . '</td>';
-                echo '<td>' . esc_html($target->getAddress()) . '</td>';
-                echo '</tr>';
-            }
-            echo '</tbody></table>';
-        }
-
-        echo '<h3>' . esc_html__('Rules', 'tamar') . ' <span style="font-weight:normal; color:#666;">(' . count($rules) . ')</span></h3>';
-        if ($rules === []) {
-            echo '<p>' . esc_html__('No forwarding rules configured.', 'tamar') . '</p>';
-        } else {
-            echo '<table class="widefat striped"><thead><tr>';
-            echo '<th>' . esc_html__('ID', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Label', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Match', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Target', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Enabled', 'tamar') . '</th>';
-            echo '<th>' . esc_html__('Priority', 'tamar') . '</th>';
-            echo '</tr></thead><tbody>';
-            foreach ($rules as $rule) {
-                echo '<tr>';
-                echo '<td><code>' . esc_html($rule->getId()) . '</code></td>';
-                echo '<td>' . esc_html($rule->getLabel()) . '</td>';
-                echo '<td><code>' . esc_html($rule->getMatchType()) . '</code></td>';
-                echo '<td><code>' . esc_html($rule->getTargetId()) . '</code></td>';
-                echo '<td>' . ($rule->isEnabled() ? '✓' : '—') . '</td>';
-                echo '<td>' . esc_html((string) $rule->getPriority()) . '</td>';
-                echo '</tr>';
-            }
-            echo '</tbody></table>';
-        }
+        (new ForwardingOverview())->render($rules, $targets);
 
         if (current_user_can('beacon_push_config')) {
             echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:1em;">';
