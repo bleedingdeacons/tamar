@@ -30,6 +30,12 @@ if (!defined('ABSPATH')) {
  */
 final class TamarSettings
 {
+    /** GCM nonce length in bytes (96-bit, the AES-GCM standard). */
+    private const GCM_IV_LEN = 12;
+
+    /** GCM authentication tag length in bytes (128-bit). */
+    private const GCM_TAG_LEN = 16;
+
     /**
      * Return a fully-populated settings array. Missing keys are
      * filled in with safe defaults so callers can rely on the shape.
@@ -41,6 +47,7 @@ final class TamarSettings
      *   rules_path:string,
      *   login_path:string,
      *   commit_path:string,
+     *   huntgroup_id:string,
      *   verify_tls:bool,
      *   timeout:int
      * }
@@ -55,9 +62,14 @@ final class TamarSettings
             'base_url' => (string) ($raw['base_url'] ?? ''),
             'username' => (string) ($raw['username'] ?? ''),
             'password_cipher' => (string) ($raw['password_cipher'] ?? ''),
-            'rules_path' => (string) ($raw['rules_path'] ?? '/admin/forwarding'),
-            'login_path' => (string) ($raw['login_path'] ?? '/admin/login'),
-            'commit_path' => (string) ($raw['commit_path'] ?? '/admin/forwarding/apply'),
+            'rules_path' => (string) ($raw['rules_path'] ?? '/phonedivert/huntgroup'),
+            'login_path' => (string) ($raw['login_path'] ?? '/phonedivert/login/'),
+            'commit_path' => (string) ($raw['commit_path'] ?? '/phonedivert/huntgroup/update'),
+            // Per-client numeric ID from the upstream edit URL
+            // (…/huntgroup?huntgroup=<id>). Stored digits-only — see
+            // save(). Empty on a fresh install; the driver can't scope
+            // to a hunt group until it's set.
+            'huntgroup_id' => (string) ($raw['huntgroup_id'] ?? ''),
             'verify_tls' => (bool) ($raw['verify_tls'] ?? true),
             'timeout' => max(1, (int) ($raw['timeout'] ?? 15)),
         ];
@@ -88,6 +100,12 @@ final class TamarSettings
             'rules_path' => self::sanitisePath((string) ($input['rules_path'] ?? $existing['rules_path'])),
             'login_path' => self::sanitisePath((string) ($input['login_path'] ?? $existing['login_path'])),
             'commit_path' => self::sanitisePath((string) ($input['commit_path'] ?? $existing['commit_path'])),
+            // The upstream hunt group ID is numeric (e.g. 157626). Strip
+            // anything that isn't a digit so a pasted value like
+            // "#157626" or a trailing space can't break the
+            // ?huntgroup= query param. An empty result is allowed —
+            // it just means "not configured yet".
+            'huntgroup_id' => preg_replace('/\D+/', '', (string) ($input['huntgroup_id'] ?? $existing['huntgroup_id'])) ?? '',
             'verify_tls' => !empty($input['verify_tls']),
             'timeout' => max(1, min(120, (int) ($input['timeout'] ?? $existing['timeout']))),
         ];
@@ -130,11 +148,18 @@ final class TamarSettings
     }
 
     /**
-     * AES-256-CBC with a key derived from AUTH_KEY. Returns
-     * `base64(iv || ciphertext)`. Returns the input wrapped in a
-     * sentinel prefix if openssl isn't available — extremely rare on
-     * a modern WP host, but the fallback means the plugin still
-     * functions rather than fataling.
+     * Authenticated encryption: AES-256-GCM with a key derived from
+     * AUTH_KEY + AUTH_SALT. Returns `gcm:base64(iv || tag || ct)`.
+     *
+     * GCM (rather than the previous CBC) gives us integrity as well as
+     * confidentiality — a tampered ciphertext fails to decrypt instead
+     * of silently yielding garbage that we'd then hand to the upstream
+     * as a password. The 96-bit IV is the GCM standard; the 128-bit
+     * auth tag is appended so decrypt() can verify it.
+     *
+     * Falls back to a base64 sentinel (`plain:`) if OpenSSL is missing
+     * or the key can't be derived — extremely rare on a modern WP host,
+     * but the fallback keeps the plugin working rather than fataling.
      */
     private static function encrypt(string $plaintext): string
     {
@@ -142,9 +167,19 @@ final class TamarSettings
         if ($key === null || !function_exists('openssl_encrypt')) {
             return 'plain:' . base64_encode($plaintext);
         }
-        $iv = random_bytes(16);
-        $ct = openssl_encrypt($plaintext, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
-        if ($ct === false) {
+        $iv = random_bytes(self::GCM_IV_LEN);
+        $tag = '';
+        $ct = openssl_encrypt(
+            $plaintext,
+            'aes-256-gcm',
+            $key,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $tag,
+            '',
+            self::GCM_TAG_LEN
+        );
+        if ($ct === false || strlen($tag) !== self::GCM_TAG_LEN) {
             // Encryption itself failed — log and fall back to the
             // sentinel-wrapped form so we don't lose the operator's
             // input. They can re-save once the host's OpenSSL is
@@ -152,7 +187,7 @@ final class TamarSettings
             \Tamar\Plugin::logWarning('openssl_encrypt failed; storing password unencrypted.');
             return 'plain:' . base64_encode($plaintext);
         }
-        return 'aes:' . base64_encode($iv . $ct);
+        return 'gcm:' . base64_encode($iv . $tag . $ct);
     }
 
     private static function decrypt(string $cipher): string
@@ -161,18 +196,48 @@ final class TamarSettings
             $b64 = substr($cipher, strlen('plain:'));
             return (string) base64_decode($b64, true);
         }
-        if (!str_starts_with($cipher, 'aes:')) {
-            // Legacy / unrecognised — return empty rather than
-            // guessing. The operator will need to re-enter the
-            // password, which is the right behaviour on an upgrade
-            // from a different encoding.
-            return '';
+        if (str_starts_with($cipher, 'gcm:')) {
+            return self::decryptGcm(substr($cipher, strlen('gcm:')));
         }
+        if (str_starts_with($cipher, 'aes:')) {
+            // Legacy CBC blob written by an older release. Decrypt with
+            // the legacy (AUTH_KEY-only) key so existing passwords keep
+            // working across the upgrade; the next save() re-encrypts
+            // them as GCM.
+            return self::decryptLegacyCbc(substr($cipher, strlen('aes:')));
+        }
+        // Unrecognised — return empty rather than guessing. The operator
+        // will need to re-enter the password, which is the right
+        // behaviour on an upgrade from an unknown encoding.
+        return '';
+    }
+
+    private static function decryptGcm(string $b64): string
+    {
         $key = self::deriveKey();
         if ($key === null || !function_exists('openssl_decrypt')) {
             return '';
         }
-        $blob = base64_decode(substr($cipher, strlen('aes:')), true);
+        $blob = base64_decode($b64, true);
+        // Need at least IV + tag; ciphertext may be short but is never
+        // empty in practice (we never store an empty password).
+        if (!is_string($blob) || strlen($blob) < self::GCM_IV_LEN + self::GCM_TAG_LEN) {
+            return '';
+        }
+        $iv = substr($blob, 0, self::GCM_IV_LEN);
+        $tag = substr($blob, self::GCM_IV_LEN, self::GCM_TAG_LEN);
+        $ct = substr($blob, self::GCM_IV_LEN + self::GCM_TAG_LEN);
+        $pt = openssl_decrypt($ct, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        return $pt === false ? '' : $pt;
+    }
+
+    private static function decryptLegacyCbc(string $b64): string
+    {
+        $key = self::deriveLegacyKey();
+        if ($key === null || !function_exists('openssl_decrypt')) {
+            return '';
+        }
+        $blob = base64_decode($b64, true);
         if (!is_string($blob) || strlen($blob) < 17) {
             return '';
         }
@@ -183,15 +248,34 @@ final class TamarSettings
     }
 
     /**
-     * Derive a 32-byte key from AUTH_KEY. Returns null if AUTH_KEY
-     * isn't defined.
+     * Derive the current 32-byte key from AUTH_KEY + AUTH_SALT (with
+     * domain separation so it can't collide with any other use of those
+     * constants). Returns null if AUTH_KEY isn't usable.
      */
     private static function deriveKey(): ?string
     {
-        if (!defined('AUTH_KEY') || AUTH_KEY === '' || AUTH_KEY === 'put your unique phrase here') {
+        if (!self::authKeyUsable()) {
             return null;
         }
-        // sha256 binary digest is exactly 32 bytes — perfect for AES-256.
+        $salt = (defined('AUTH_SALT') && is_string(AUTH_SALT)) ? AUTH_SALT : '';
+        // HMAC output is 32 bytes — exactly an AES-256 key.
+        return hash_hmac('sha256', 'tamar/password/v2', (string) AUTH_KEY . $salt, true);
+    }
+
+    /**
+     * The pre-GCM key derivation (AUTH_KEY only, plain SHA-256), kept
+     * solely so legacy `aes:` CBC ciphertexts remain decryptable.
+     */
+    private static function deriveLegacyKey(): ?string
+    {
+        if (!self::authKeyUsable()) {
+            return null;
+        }
         return hash('sha256', (string) AUTH_KEY, true);
+    }
+
+    private static function authKeyUsable(): bool
+    {
+        return defined('AUTH_KEY') && AUTH_KEY !== '' && AUTH_KEY !== 'put your unique phrase here';
     }
 }
