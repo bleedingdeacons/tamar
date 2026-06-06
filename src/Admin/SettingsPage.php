@@ -214,19 +214,17 @@ final class SettingsPage
 
         echo '</tbody></table>';
 
+        // Both buttons live inside the settings form so the values
+        // currently in the fields are POSTed (and saved) before we act.
+        // "Test connection" sets tamar_do_test=1, which tells handleSave
+        // to save first and then run the connection test.
         if ($canEdit) {
-            submit_button(__('Save settings', 'tamar'));
+            echo '<p class="submit">';
+            echo '<button type="submit" name="submit" class="button button-primary">' . esc_html__('Save settings', 'tamar') . '</button> ';
+            echo '<button type="submit" name="tamar_do_test" value="1" class="button">' . esc_html__('Save and test connection', 'tamar') . '</button>';
+            echo '</p>';
         }
         echo '</form>';
-
-        // Test connection button — separate form so it can fire without saving.
-        if (current_user_can('beacon_view_forwarding')) {
-            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:1em;">';
-            echo '<input type="hidden" name="action" value="tamar_test_connection">';
-            wp_nonce_field('tamar_test_connection');
-            echo '<button class="button" type="submit">' . esc_html__('Test connection', 'tamar') . '</button>';
-            echo '</form>';
-        }
     }
 
     private function renderStatePanel(): void
@@ -270,6 +268,15 @@ final class SettingsPage
         check_admin_referer('tamar_save_settings');
 
         TamarSettings::save($_POST);
+
+        // "Save and test connection" was clicked: persist first (done
+        // above), then run the test against the freshly saved settings.
+        if (isset($_POST['tamar_do_test'])) {
+            $this->runConnectionTest();
+            $this->redirectTo(self::SETTINGS_SLUG);
+            return;
+        }
+
         $this->setFlash('success', __('Tamar settings saved.', 'tamar'));
         $this->redirectTo(self::SETTINGS_SLUG);
     }
@@ -281,6 +288,12 @@ final class SettingsPage
         }
         check_admin_referer('tamar_test_connection');
 
+        $this->runConnectionTest();
+        $this->redirectTo(self::SETTINGS_SLUG);
+    }
+
+    private function runConnectionTest(): void
+    {
         try {
             /** @var CallForwardingService $service */
             $service = $this->container->get(CallForwardingService::class);
@@ -289,8 +302,6 @@ final class SettingsPage
         } catch (\Throwable $e) {
             $this->setFlash('error', __('Connection failed: ', 'tamar') . $e->getMessage());
         }
-
-        $this->redirectTo(self::SETTINGS_SLUG);
     }
 
     public function handleCommit(): void
