@@ -49,6 +49,12 @@ final class HuntgroupFormBuilder
 {
     use \Tamar\Logger\HasLogger;
 
+    /** Log to the shared "tamar" channel so log lines name the plugin. */
+    protected static function logChannel(): string
+    {
+        return 'tamar';
+    }
+
     /**
      * Encode the parsed state (optionally overlaid with edits) as the
      * application/x-www-form-urlencoded body Tamar expects.

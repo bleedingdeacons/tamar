@@ -20,7 +20,7 @@ Tamar never touches Beacon's namespace internals — it depends on the public in
 
 The upstream is a session-cookie-authenticated HTML admin. There is no public API, so the driver shapes its calls the same way a human admin would point a browser at it:
 
-1. **Login.** POST `username` and `password` to `/phonedivert/login/`. The transport retains the session cookie for subsequent calls.
+1. **Login.** POST the credentials to `/customer-login/` (form id `login`). Success/failure is signalled in the post-login URL — `?logged_in=1` on success, `?notify=failedlogin` on a rejected credential — not by the HTTP status, so the driver inspects the redirect rather than the status code. The transport retains the session cookie for subsequent calls.
 2. **Read.** GET `/phonedivert/huntgroup?huntgroup=<id>`. Parse out the top-level rota metadata (name, announcement, voicemail, hunting strategy), every `<tr class="huntdest">` rota row, and the available voicemail boxes.
 3. **Mutate.** Apply the operator's edit to the parsed state in memory.
 4. **Save.** POST the whole rota back, form-urlencoded, to `/phonedivert/huntgroup/update`. The upstream replaces the entire rota with the submitted body, so the driver re-encodes every row, not just the changed one.
@@ -52,7 +52,7 @@ The top-level **Tamar** menu in the WordPress admin (**Tamar → Settings**):
 | Base URL | `https://www.tamartelecommunications.co.uk` — no trailing slash. |
 | Username / Password | Tamar control-panel login. The password is encrypted at rest with a key derived from `AUTH_KEY`. |
 | Hunt-group page path | GET endpoint. Default `/phonedivert/huntgroup`. |
-| Login path | Default `/phonedivert/login/`. |
+| Login path | Default `/customer-login/`. |
 | Update path | POST endpoint that saves the rota. Default `/phonedivert/huntgroup/update`. |
 | **Hunt group ID** | The numeric ID from the upstream edit URL — e.g. `157626` from `.../huntgroup?huntgroup=157626`. This is per-client; without it Tamar can't tell which hunt group on the account to edit. |
 | Verify TLS certificate | Default on. Disable only for self-signed dev hosts. |

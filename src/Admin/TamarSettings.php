@@ -63,7 +63,7 @@ final class TamarSettings
             'username' => (string) ($raw['username'] ?? ''),
             'password_cipher' => (string) ($raw['password_cipher'] ?? ''),
             'rules_path' => (string) ($raw['rules_path'] ?? '/phonedivert/huntgroup'),
-            'login_path' => (string) ($raw['login_path'] ?? '/phonedivert/login/'),
+            'login_path' => (string) ($raw['login_path'] ?? '/customer-login/'),
             'commit_path' => (string) ($raw['commit_path'] ?? '/phonedivert/huntgroup/update'),
             // Per-client numeric ID from the upstream edit URL
             // (…/huntgroup?huntgroup=<id>). Stored digits-only — see

@@ -40,6 +40,12 @@ final class SettingsPage
 {
     use \Tamar\Logger\HasLogger;
 
+    /** Log to the shared "tamar" channel so log lines name the plugin. */
+    protected static function logChannel(): string
+    {
+        return 'tamar';
+    }
+
     /** Top-level menu slug — a container only, with no page of its own. */
     private const MENU_SLUG = 'tamar';
 
@@ -192,7 +198,7 @@ final class SettingsPage
 
         echo '<tr><th><label for="tamar-login-path">' . esc_html__('Login path', 'tamar') . '</label></th>';
         echo '<td><input id="tamar-login-path" name="login_path" type="text" class="regular-text" value="' . esc_attr($settings['login_path']) . '"' . $disabled . '>';
-        echo '<p class="description">' . esc_html__('Default: /phonedivert/login/', 'tamar') . '</p></td></tr>';
+        echo '<p class="description">' . esc_html__('Default: /customer-login/', 'tamar') . '</p></td></tr>';
 
         echo '<tr><th><label for="tamar-commit-path">' . esc_html__('Update path', 'tamar') . '</label></th>';
         echo '<td><input id="tamar-commit-path" name="commit_path" type="text" class="regular-text" value="' . esc_attr($settings['commit_path']) . '"' . $disabled . '>';

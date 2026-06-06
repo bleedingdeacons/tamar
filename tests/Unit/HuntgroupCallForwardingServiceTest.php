@@ -122,10 +122,70 @@ final class HuntgroupCallForwardingServiceTest extends TestCase
 
         self::assertTrue($service->testConnection());
 
-        $logins = array_filter($transport->log, fn($e) => str_contains($e['url'], '/phonedivert/login/'));
+        $logins = array_filter($transport->log, fn($e) => str_contains($e['url'], '/customer-login/'));
         $gets = array_filter($transport->log, fn($e) => $e['method'] === 'GET');
         self::assertCount(1, $logins);
         self::assertCount(1, $gets);
+    }
+
+    public function test_login_aborts_when_credentials_missing(): void
+    {
+        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
+        // Empty password — login should be refused before any HTTP call.
+        $service = new HuntgroupCallForwardingService(
+            transport: $transport,
+            parser: new HuntgroupPageParser(),
+            builder: new HuntgroupFormBuilder(),
+            baseUrl: 'https://example.tamartelecommunications.co.uk',
+            username: 'demo',
+            password: '',
+            huntgroupId: '157626',
+        );
+
+        try {
+            $service->testConnection();
+            self::fail('Expected ForwardingException when credentials are missing.');
+        } catch (ForwardingException $e) {
+            self::assertStringContainsString('not configured', $e->getMessage());
+        }
+
+        // No request of any kind should have been made.
+        self::assertSame([], $transport->log);
+    }
+
+    public function test_testConnection_throws_when_login_is_rejected(): void
+    {
+        $transport = new FakeHttpTransport([
+            'default' => $this->fixture(),
+            'login_fails' => true,
+        ]);
+        $service = $this->makeService($transport);
+
+        // A wrong credential redirects to ?notify=failedlogin. The
+        // service must treat that as a failure even though the HTTP
+        // status is a normal 302, and must NOT proceed to fetch the
+        // hunt-group page.
+        try {
+            $service->testConnection();
+            self::fail('Expected ForwardingException on rejected login.');
+        } catch (ForwardingException $e) {
+            self::assertStringContainsString('login', strtolower($e->getMessage()));
+        }
+
+        $gets = array_filter($transport->log, fn($e) => $e['method'] === 'GET');
+        self::assertCount(0, $gets, 'No page GET should happen after a failed login.');
+    }
+
+    public function test_listRules_throws_when_login_is_rejected(): void
+    {
+        $transport = new FakeHttpTransport([
+            'default' => $this->fixture(),
+            'login_fails' => true,
+        ]);
+        $service = $this->makeService($transport);
+
+        $this->expectException(ForwardingException::class);
+        $service->listRules();
     }
 
     public function test_listRules_throws_when_upstream_returns_4xx(): void
@@ -187,7 +247,7 @@ final class FakeHttpTransport implements HttpTransport
     public array $log = [];
 
     /**
-     * @param array{default:string, override_get_status?:int} $config
+     * @param array{default:string, override_get_status?:int, login_fails?:bool} $config
      */
     public function __construct(private array $config)
     {
@@ -197,9 +257,23 @@ final class FakeHttpTransport implements HttpTransport
     {
         $this->log[] = compact('method', 'url', 'headers', 'body');
 
-        // Login endpoint — 200 with a session cookie response.
-        if (str_contains($url, '/phonedivert/login/')) {
-            return ['status' => 200, 'headers' => [], 'body' => ''];
+        // Login endpoint — the upstream redirects to ?logged_in=1 on
+        // success or ?notify=failedlogin on a bad credential. We model
+        // that outcome via the Location header, which is what the
+        // service inspects.
+        if (str_contains($url, '/customer-login/')) {
+            if (($this->config['login_fails'] ?? false) === true) {
+                return [
+                    'status' => 302,
+                    'headers' => ['location' => $url . '?notify=failedlogin'],
+                    'body' => '',
+                ];
+            }
+            return [
+                'status' => 302,
+                'headers' => ['location' => $url . '?logged_in=1'],
+                'body' => '',
+            ];
         }
 
         // GET the huntgroup page.

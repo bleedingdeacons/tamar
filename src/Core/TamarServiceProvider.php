@@ -63,6 +63,10 @@ final class TamarServiceProvider
             return new WpHttpTransportFactory(
                 verifyTls: $settings['verify_tls'],
                 timeoutSeconds: $settings['timeout'],
+                // Attribute the generic Beacon transport's HTTP logging
+                // to Tamar's own channel, so a log line names the plugin
+                // the traffic belongs to rather than the transport class.
+                logChannel: 'tamar',
             );
         });
 
