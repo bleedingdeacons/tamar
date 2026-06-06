@@ -11,27 +11,33 @@ if (!defined('ABSPATH')) {
 use Psr\Container\ContainerInterface;
 use Beacon\Forwarding\Interfaces\CallForwardingService;
 use Beacon\Transport\Interfaces\HttpTransport;
+use Beacon\Transport\Interfaces\HttpTransportFactory;
+use Beacon\Transport\WpHttpTransportFactory;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
 use Tamar\Forwarding\HuntgroupFormBuilder;
 use Tamar\Forwarding\HuntgroupPageParser;
-use Tamar\Transport\WpHttpTransport;
 
 /**
  * Wire Tamar's concrete drivers into Beacon's container.
  *
- * Two bindings:
+ * Three bindings:
  *
- *  1. {@see HttpTransport} → {@see WpHttpTransport}. WP's HTTP API
- *     respects host-level proxy and CA config that a raw cURL handle
- *     would ignore.
+ *  1. {@see HttpTransportFactory} → {@see WpHttpTransportFactory}.
+ *     Beacon owns the WP-HTTP transport now; Tamar just configures
+ *     the factory (TLS verification + timeout from settings) and
+ *     leaves construction to it.
  *
- *  2. {@see CallForwardingService} → {@see HuntgroupCallForwardingService}.
+ *  2. {@see HttpTransport} → resolved by asking the factory for a
+ *     fresh instance. WP's HTTP API respects host-level proxy and CA
+ *     config that a raw cURL handle would ignore.
+ *
+ *  3. {@see CallForwardingService} → {@see HuntgroupCallForwardingService}.
  *     Driver specifically targets Tamar Telecommunications'
  *     `/phonedivert/huntgroup` editor. Settings are read inside the
  *     factory, not at registration time, so an admin-page save takes
  *     effect on the next request without needing a page reload.
  *
- * Both bindings are factories so a request that never touches
+ * All bindings are factories so a request that never touches
  * forwarding (a front-end page hit) doesn't pay the cost of building
  * them.
  *
@@ -52,12 +58,18 @@ final class TamarServiceProvider
             return;
         }
 
-        $container->factory(HttpTransport::class, function () {
+        $container->factory(HttpTransportFactory::class, function () {
             $settings = \Tamar\Admin\TamarSettings::load();
-            return new WpHttpTransport(
+            return new WpHttpTransportFactory(
                 verifyTls: $settings['verify_tls'],
                 timeoutSeconds: $settings['timeout'],
             );
+        });
+
+        $container->factory(HttpTransport::class, function (ContainerInterface $c) {
+            /** @var HttpTransportFactory $factory */
+            $factory = $c->get(HttpTransportFactory::class);
+            return $factory->create();
         });
 
         $container->factory(CallForwardingService::class, function (ContainerInterface $c) {

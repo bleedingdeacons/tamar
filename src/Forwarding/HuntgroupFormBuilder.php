@@ -47,6 +47,8 @@ if (!defined('ABSPATH')) {
  */
 final class HuntgroupFormBuilder
 {
+    use \Tamar\Logger\HasLogger;
+
     /**
      * Encode the parsed state (optionally overlaid with edits) as the
      * application/x-www-form-urlencoded body Tamar expects.
@@ -90,7 +92,13 @@ final class HuntgroupFormBuilder
         foreach ($pairs as [$name, $value]) {
             $flat[] = rawurlencode($name) . '=' . rawurlencode($value);
         }
-        return implode('&', $flat);
+        $encoded = implode('&', $flat);
+        self::logDebug('Built hunt-group update body', [
+            'row_count' => $ordinal,
+            'field_count' => count($pairs),
+            'body_bytes' => strlen($encoded),
+        ]);
+        return $encoded;
     }
 
     /**
@@ -114,6 +122,9 @@ final class HuntgroupFormBuilder
             // New row — append.
             $rules[] = $edited;
             $state['rules'] = $rules;
+            self::logDebug('Applied rule edit: appended new row', [
+                'row_count' => count($rules),
+            ]);
             return $state;
         }
 
@@ -124,6 +135,9 @@ final class HuntgroupFormBuilder
             if ((string) ($existing['id'] ?? '') === $editedId) {
                 $rules[$i] = $this->mergeRow($existing, $edited);
                 $state['rules'] = $rules;
+                self::logDebug('Applied rule edit: merged in place', [
+                    'rule_id' => $editedId,
+                ]);
                 return $state;
             }
         }
@@ -132,6 +146,10 @@ final class HuntgroupFormBuilder
         // Save-then-list workflow then resolves the canonical ID.
         $rules[] = $edited;
         $state['rules'] = $rules;
+        self::logWarning('Applied rule edit: id not found, appended as new row', [
+            'rule_id' => $editedId,
+            'row_count' => count($rules),
+        ]);
         return $state;
     }
 
@@ -158,6 +176,11 @@ final class HuntgroupFormBuilder
             $kept[] = $rule;
         }
         $state['rules'] = $kept;
+        self::logDebug('Applied rule delete', [
+            'rule_id' => $ruleId,
+            'removed' => $removed,
+            'remaining' => count($kept),
+        ]);
         return [$state, $removed];
     }
 

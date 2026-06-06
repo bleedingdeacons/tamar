@@ -87,6 +87,10 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
             }
             $rules = $rewritten;
         }
+        self::logDebug('Listed forwarding rules', [
+            'huntgroup_id' => $this->huntgroupId,
+            'count' => count($rules),
+        ]);
         return $rules;
     }
 
@@ -94,14 +98,30 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
     {
         foreach ($this->listRules() as $rule) {
             if ($rule->getId() === $ruleId) {
+                self::logDebug('Found forwarding rule', [
+                    'huntgroup_id' => $this->huntgroupId,
+                    'rule_id' => $ruleId,
+                ]);
                 return $rule;
             }
         }
+        self::logDebug('Forwarding rule not found', [
+            'huntgroup_id' => $this->huntgroupId,
+            'rule_id' => $ruleId,
+        ]);
         return null;
     }
 
     public function saveRule(ForwardingRule $rule): string
     {
+        self::logInfo('Saving forwarding rule', [
+            'huntgroup_id' => $this->huntgroupId,
+            'rule_id' => $rule->getId() !== '' ? $rule->getId() : '(new)',
+            'match_type' => $rule->getMatchType(),
+            'target_id' => $rule->getTargetId(),
+            'enabled' => $rule->isEnabled(),
+        ]);
+
         $this->validateRule($rule);
 
         $state = $this->load();
@@ -117,29 +137,56 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         // After a save, the canonical ID is the new positional ordinal.
         // For an edit-in-place, the existing ID is fine.
         if ($rule->getId() !== '') {
+            self::logInfo('Forwarding rule saved (edit in place)', [
+                'huntgroup_id' => $this->huntgroupId,
+                'rule_id' => $rule->getId(),
+            ]);
             return $rule->getId();
         }
         // For an append, the new row's ordinal is rules-count after
         // the local apply. The upstream will renumber on next GET, but
         // this is the value callers expect right now.
-        return (string) count($state['rules']);
+        $newId = (string) count($state['rules']);
+        self::logInfo('Forwarding rule saved (appended)', [
+            'huntgroup_id' => $this->huntgroupId,
+            'rule_id' => $newId,
+        ]);
+        return $newId;
     }
 
     public function deleteRule(string $ruleId): bool
     {
+        self::logInfo('Deleting forwarding rule', [
+            'huntgroup_id' => $this->huntgroupId,
+            'rule_id' => $ruleId,
+        ]);
         $state = $this->load();
         [$state, $removed] = $this->builder->applyRuleDelete($state, $ruleId);
         if (!$removed) {
+            self::logWarning('Delete requested for unknown rule; nothing removed', [
+                'huntgroup_id' => $this->huntgroupId,
+                'rule_id' => $ruleId,
+            ]);
             return false;
         }
         $this->pushState($state);
+        self::logInfo('Forwarding rule deleted', [
+            'huntgroup_id' => $this->huntgroupId,
+            'rule_id' => $ruleId,
+            'remaining' => count($state['rules']),
+        ]);
         return true;
     }
 
     public function listTargets(): array
     {
         $state = $this->load();
-        return $this->hydrateTargets($state['targets']);
+        $targets = $this->hydrateTargets($state['targets']);
+        self::logDebug('Listed forwarding targets', [
+            'huntgroup_id' => $this->huntgroupId,
+            'count' => count($targets),
+        ]);
+        return $targets;
     }
 
     public function commit(): bool
@@ -147,14 +194,24 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         // Tamar's upstream applies changes on each update POST — no
         // separate commit step. We return true unconditionally so
         // callers can treat the contract uniformly across drivers.
+        self::logDebug('commit() is a no-op for the Tamar driver (changes apply on each update POST)', [
+            'huntgroup_id' => $this->huntgroupId,
+        ]);
         return true;
     }
 
     public function testConnection(): bool
     {
+        self::logInfo('Testing upstream connection', [
+            'huntgroup_id' => $this->huntgroupId,
+            'base_url' => $this->baseUrl,
+        ]);
         $this->cache = null;
         $this->loggedIn = false;
         $this->load();
+        self::logInfo('Upstream connection test succeeded', [
+            'huntgroup_id' => $this->huntgroupId,
+        ]);
         return true;
     }
 
@@ -169,23 +226,50 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
     private function load(): array
     {
         if ($this->cache !== null) {
+            self::logDebug('Serving hunt-group page from per-request cache', [
+                'huntgroup_id' => $this->huntgroupId,
+            ]);
             return $this->cache;
         }
         $this->ensureLoggedIn();
+        $url = $this->rulesUrl();
+        self::logDebug('Fetching hunt-group page', [
+            'huntgroup_id' => $this->huntgroupId,
+            'url' => $url,
+        ]);
         try {
-            $resp = $this->transport->request('GET', $this->rulesUrl());
+            $resp = $this->transport->request('GET', $url);
         } catch (TransportException $e) {
+            self::logError('Transport failure fetching hunt-group page', [
+                'huntgroup_id' => $this->huntgroupId,
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
             throw new ForwardingException('Could not reach the upstream: ' . $e->getMessage(), 0, $e);
         }
         if ($resp['status'] === 401 || $resp['status'] === 403) {
+            self::logError('Upstream returned unauthorised fetching hunt-group page', [
+                'huntgroup_id' => $this->huntgroupId,
+                'status' => $resp['status'],
+            ]);
             throw new ForwardingException(
                 'Upstream returned unauthorised when fetching the hunt-group page. Check Tamar credentials.'
             );
         }
         if ($resp['status'] >= 400) {
+            self::logError('Upstream returned error status fetching hunt-group page', [
+                'huntgroup_id' => $this->huntgroupId,
+                'status' => $resp['status'],
+            ]);
             throw new ForwardingException('Upstream returned status ' . $resp['status'] . ' when fetching the hunt-group page.');
         }
         $this->cache = $this->parser->parse((string) ($resp['body'] ?? ''));
+        self::logDebug('Hunt-group page fetched and parsed', [
+            'huntgroup_id' => $this->huntgroupId,
+            'status' => $resp['status'],
+            'rule_count' => count($this->cache['rules'] ?? []),
+            'target_count' => count($this->cache['targets'] ?? []),
+        ]);
         return $this->cache;
     }
 
@@ -199,27 +283,57 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
     {
         $this->ensureLoggedIn();
         $body = $this->builder->build($state);
+        $url = rtrim($this->baseUrl, '/') . $this->updatePath;
+        self::logDebug('Pushing rota to upstream', [
+            'huntgroup_id' => $this->huntgroupId,
+            'url' => $url,
+            'rule_count' => count($state['rules'] ?? []),
+            'body_bytes' => strlen($body),
+        ]);
         try {
             $resp = $this->transport->request(
                 'POST',
-                rtrim($this->baseUrl, '/') . $this->updatePath,
+                $url,
                 ['Content-Type' => 'application/x-www-form-urlencoded'],
                 $body,
             );
         } catch (TransportException $e) {
+            self::logError('Transport failure saving rota', [
+                'huntgroup_id' => $this->huntgroupId,
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
             throw new ForwardingException('Could not reach the upstream to save the rota: ' . $e->getMessage(), 0, $e);
         }
         if ($resp['status'] >= 400) {
+            self::logError('Upstream returned error status saving rota', [
+                'huntgroup_id' => $this->huntgroupId,
+                'status' => $resp['status'],
+            ]);
             throw new ForwardingException('Upstream returned status ' . $resp['status'] . ' when saving the rota.');
         }
+        self::logDebug('Rota saved upstream; invalidating cache', [
+            'huntgroup_id' => $this->huntgroupId,
+            'status' => $resp['status'],
+        ]);
         $this->cache = null;
     }
 
     private function ensureLoggedIn(): void
     {
         if ($this->loggedIn) {
+            self::logDebug('Already logged in to upstream this request', [
+                'huntgroup_id' => $this->huntgroupId,
+            ]);
             return;
         }
+        $url = rtrim($this->baseUrl, '/') . $this->loginPath;
+        // Credentials are deliberately never placed in the log context.
+        self::logDebug('Logging in to upstream', [
+            'huntgroup_id' => $this->huntgroupId,
+            'url' => $url,
+            'username' => $this->username,
+        ]);
         $body = http_build_query([
             'username' => $this->username,
             'password' => $this->password,
@@ -227,20 +341,33 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         try {
             $resp = $this->transport->request(
                 'POST',
-                rtrim($this->baseUrl, '/') . $this->loginPath,
+                $url,
                 ['Content-Type' => 'application/x-www-form-urlencoded'],
                 $body,
             );
         } catch (TransportException $e) {
+            self::logError('Transport failure during upstream login', [
+                'huntgroup_id' => $this->huntgroupId,
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
             throw new ForwardingException('Could not reach the upstream login page: ' . $e->getMessage(), 0, $e);
         }
         // The login endpoint may return 200 with a session cookie or
         // redirect to the dashboard. Either is fine; only an explicit
         // 4xx is a failure.
         if ($resp['status'] >= 400) {
+            self::logError('Upstream login failed', [
+                'huntgroup_id' => $this->huntgroupId,
+                'status' => $resp['status'],
+            ]);
             throw new ForwardingException('Upstream login failed with status ' . $resp['status'] . '.');
         }
         $this->loggedIn = true;
+        self::logInfo('Logged in to upstream', [
+            'huntgroup_id' => $this->huntgroupId,
+            'status' => $resp['status'],
+        ]);
     }
 
     private function rulesUrl(): string

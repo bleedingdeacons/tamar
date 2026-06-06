@@ -1,6 +1,6 @@
 # Tamar — Tamar Telecommunications Driver for Beacon
 
-**Version:** 1.1.0
+**Version:** 1.2.1
 
 Tamar is the implementation half of the Beacon call-forwarding stack. It targets one specific upstream — **Tamar Telecommunications' control panel** (`www.tamartelecommunications.co.uk/phonedivert/...`) — and implements Beacon's `CallForwardingService` contract by reading and writing the hunt-group editor.
 

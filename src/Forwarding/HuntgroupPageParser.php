@@ -61,6 +61,8 @@ use Beacon\Forwarding\Interfaces\ForwardingException;
  */
 final class HuntgroupPageParser
 {
+    use \Tamar\Logger\HasLogger;
+
     /**
      * Shape of the returned array:
      *
@@ -114,8 +116,11 @@ final class HuntgroupPageParser
     public function parse(string $html): array
     {
         if (trim($html) === '') {
+            self::logError('Hunt-group page HTML was empty');
             throw new ForwardingException('Hunt-group page HTML was empty.');
         }
+
+        self::logDebug('Parsing hunt-group page', ['html_bytes' => strlen($html)]);
 
         $doc = $this->loadDocument($html);
         $xpath = new \DOMXPath($doc);
@@ -127,6 +132,10 @@ final class HuntgroupPageParser
         $form = $xpath->query("//form[@id='auto-form']")->item(0);
         $table = $xpath->query("//table[@id='huntingconfig']")->item(0);
         if (!$form instanceof \DOMElement || !$table instanceof \DOMElement) {
+            self::logError('Hunt-group page missing expected edit form/table', [
+                'has_form' => $form instanceof \DOMElement,
+                'has_table' => $table instanceof \DOMElement,
+            ]);
             throw new ForwardingException(
                 'Hunt-group page did not contain the expected edit form. '
                 . 'The upstream may have redirected us to the login page, or its admin UI has changed shape.'
@@ -136,6 +145,12 @@ final class HuntgroupPageParser
         $meta = $this->extractMeta($xpath, $form);
         $rules = $this->extractRules($xpath, $table);
         $targets = $this->synthesiseTargets($meta, $rules);
+
+        self::logDebug('Hunt-group page parsed', [
+            'huntgroup_id' => $meta['huntgroup_id'] ?? '',
+            'rule_count' => count($rules),
+            'target_count' => count($targets),
+        ]);
 
         return [
             'meta' => $meta,
@@ -190,6 +205,9 @@ final class HuntgroupPageParser
                 // A row without a numeric prefix is malformed — skip
                 // rather than throw, so one bad row doesn't make the
                 // whole list unloadable.
+                self::logWarning('Skipping malformed huntdest row with no detectable ordinal', [
+                    'position' => $position,
+                ]);
                 continue;
             }
             $row = $this->buildRule($xpath, $row, $ordinal, $position);
