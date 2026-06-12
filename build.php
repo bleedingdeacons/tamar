@@ -88,17 +88,11 @@ class PluginBuilder
         // Build script
             'build.php',
 
-        // ==== VENDOR DEV PACKAGES NOT NEEDED IN DEV BUILD ====
-        // These are dev tools, not needed to run/test the plugin
-            'vendor/bin',
-            'vendor/phpstan',
-
-        // Vendor unnecessary files
-            'vendor/*/.git',
-            'vendor/*/.github',
-            'vendor/*/*/.github',
-            'vendor/*/doc',
-            'vendor/*/docs',
+        // Working vendor/ — after `composer install` this holds dev test
+        // tooling (phpunit, phpstan, mockery, …). Production excludes it
+        // wholesale and ships a freshly staged --no-dev vendor/ instead
+        // (see stageProductionVendor()).
+            'vendor',
     ];
 
     // Files and directories to exclude in dev builds
@@ -215,11 +209,15 @@ class PluginBuilder
         $this->log("Building {$type} archive for version {$this->version}...");
         $this->log("Platform: " . PHP_OS . " (" . ($this->isWindows ? "Windows" : "Unix-like") . ")");
 
-        // Check for vendor directory
-        $vendorDir = $this->pluginDir . DIRECTORY_SEPARATOR . 'vendor';
-        if (!is_dir($vendorDir)) {
-            $this->log("Warning: vendor directory not found. Running 'composer install'...");
-            $this->runComposer();
+        // Dev builds ship the working vendor/ (with test tooling) as-is, so
+        // make sure it exists. Production builds ignore the working vendor/
+        // entirely and stage a clean --no-dev copy just before zipping.
+        if ($type === 'dev') {
+            $vendorDir = $this->pluginDir . DIRECTORY_SEPARATOR . 'vendor';
+            if (!is_dir($vendorDir)) {
+                $this->log("Warning: vendor directory not found. Running 'composer install'...");
+                $this->runComposer();
+            }
         }
 
         // Create build directory
@@ -253,8 +251,12 @@ class PluginBuilder
         // Stamp the build date into the main plugin header
         $this->syncBuildDate();
 
+        // Stage a clean production vendor/ (psr/container + autoloader, no
+        // dev tooling) without touching the working vendor/ used for tests.
+        $stagedVendor = $type === 'dev' ? null : $this->stageProductionVendor();
+
         // Create ZIP archive
-        $this->createZip($archiveName, $excludes);
+        $this->createZip($archiveName, $excludes, $stagedVendor);
 
         // Display file size
         $this->log("Archive created successfully: " . basename($archiveName));
@@ -296,9 +298,73 @@ class PluginBuilder
     }
 
     /**
+     * Stage a clean production vendor/ for inclusion in the archive.
+     *
+     * Runs `composer install --no-dev --optimize-autoloader` against a copy
+     * of composer.json / composer.lock in an isolated staging directory under
+     * build/, so the developer's working vendor/ (which holds phpunit,
+     * phpstan and other test tooling) is never mutated. Returns the absolute
+     * path to the staged vendor/ directory, or null when there is nothing to
+     * ship (no composer.json, or no production dependencies).
+     */
+    private function stageProductionVendor(): ?string
+    {
+        $composerFile = $this->pluginDir . DIRECTORY_SEPARATOR . 'composer.json';
+        if (!file_exists($composerFile)) {
+            $this->log("No composer.json — production archive will ship no vendor/");
+            return null;
+        }
+
+        $stagingDir = $this->buildDir . DIRECTORY_SEPARATOR . '.vendor-staging';
+        if (is_dir($stagingDir)) {
+            $this->deleteDirectory($stagingDir);
+        }
+        if (!mkdir($stagingDir, 0755, true)) {
+            $this->error("Failed to create vendor staging directory: {$stagingDir}");
+            exit(1);
+        }
+
+        // Copy the dependency manifests so composer resolves the same set,
+        // and the exact locked versions when a lock file is present.
+        copy($composerFile, $stagingDir . DIRECTORY_SEPARATOR . 'composer.json');
+        $lockFile = $this->pluginDir . DIRECTORY_SEPARATOR . 'composer.lock';
+        if (file_exists($lockFile)) {
+            copy($lockFile, $stagingDir . DIRECTORY_SEPARATOR . 'composer.lock');
+        }
+
+        $command = sprintf(
+            'composer install --no-dev --optimize-autoloader --no-interaction --working-dir=%s 2>&1',
+            escapeshellarg($stagingDir)
+        );
+        $this->log("Staging production vendor: {$command}");
+
+        $output = [];
+        $returnCode = 0;
+        exec($command, $output, $returnCode);
+
+        if ($returnCode !== 0) {
+            $this->error("Composer (no-dev) install failed with code {$returnCode}");
+            foreach ($output as $line) {
+                $this->error("  " . $line);
+            }
+            exit(1);
+        }
+
+        $stagedVendor = $stagingDir . DIRECTORY_SEPARATOR . 'vendor';
+        if (!is_dir($stagedVendor)) {
+            // No production dependencies were installed — nothing to ship.
+            $this->log("No production dependencies — archive will ship no vendor/");
+            return null;
+        }
+
+        $this->log("Staged production vendor/ (no-dev) ready");
+        return $stagedVendor;
+    }
+
+    /**
      * Create a ZIP archive
      */
-    private function createZip(string $archivePath, array $excludes): void
+    private function createZip(string $archivePath, array $excludes, ?string $stagedVendor = null): void
     {
         $zip = new ZipArchive();
 
@@ -329,6 +395,25 @@ class PluginBuilder
                     continue;
                 }
                 $zip->addFromString($zipPath, $contents);
+                $fileCount++;
+            }
+        }
+
+        // Inject the staged production vendor/ (no dev tooling) under the
+        // plugin's vendor/ path. The working vendor/ was excluded from the
+        // walk above, so this is the only vendor/ that reaches the archive.
+        if ($stagedVendor !== null && is_dir($stagedVendor)) {
+            foreach ($this->getFiles($stagedVendor, []) as $file) {
+                if (!is_file($file)) {
+                    continue;
+                }
+                $relativePath = str_replace('\\', '/', substr($file, strlen($stagedVendor) + 1));
+                $contents = file_get_contents($file);
+                if ($contents === false) {
+                    $this->error("Warning: Could not read file: {$file}");
+                    continue;
+                }
+                $zip->addFromString($this->pluginName . '/vendor/' . $relativePath, $contents);
                 $fileCount++;
             }
         }
@@ -506,7 +591,7 @@ class PluginBuilder
             return;
         }
 
-        $buildDate = date('Y/m/d');
+        $buildDate = date('Y/m/d H:i:s');
 
         // First, try to update an existing "Build date:" line.
         $updated = preg_replace(

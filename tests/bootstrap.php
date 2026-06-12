@@ -34,6 +34,7 @@ require_once $beaconSrc . '/Transport/Interfaces/HttpTransport.php';
 require_once $beaconSrc . '/Transport/Interfaces/TransportException.php';
 
 // Tamar source.
+require_once __DIR__ . '/../src/Forwarding/HtmlDocument.php';
 require_once __DIR__ . '/../src/Forwarding/HuntgroupPageParser.php';
 require_once __DIR__ . '/../src/Forwarding/HuntgroupFormBuilder.php';
 

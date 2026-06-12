@@ -24,12 +24,19 @@ use Beacon\Transport\Interfaces\TransportException;
  *   POST /phonedivert/huntgroup/update      (form-urlencoded, replaces whole rota)
  *   POST /customer-login/                   (session-cookie auth)
  *
- * The login form (id="login") signals its outcome in the URL rather
- * than the status code: a successful login redirects to
- * `?logged_in=1`, a rejected credential to `?notify=failedlogin`.
- * `ensureLoggedIn()` therefore decides success/failure from the
- * post-login URL (Location header, body as fallback), not from the
- * HTTP status alone.
+ * The login form (id="login") is WordPress-style: it carries a nonce
+ * in a hidden input and sets a session/test cookie when the page is
+ * fetched. `ensureLoggedIn()` therefore GETs `/customer-login` first
+ * to (a) populate the transport's cookie jar — which the transport
+ * replays automatically on the following POST — and (b) read the
+ * nonce (and any other hidden fields) out of the form, then POSTs the
+ * credentials together with those hidden fields back to the same URL.
+ *
+ * The form signals its outcome in the URL rather than the status code:
+ * a successful login redirects to `?logged_in=1`, a rejected
+ * credential to `?notify=failedlogin`. `ensureLoggedIn()` decides
+ * success/failure from the post-login URL (Location header, body as
+ * fallback), not from the HTTP status alone.
  *
  * There is no separate "apply pending changes" step on the upstream —
  * POSTing the update commits immediately. We implement `commit()` as
@@ -433,21 +440,43 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
             );
         }
         // The customer-login form (id="login") is a WordPress-style
+        // login, which means it carries a one-time nonce in a hidden
+        // input and sets a session/test cookie on the GET. POSTing
+        // credentials cold — without first fetching the form — fails on
+        // a hardened WP login: the nonce is missing and the login-test
+        // cookie the server expects to see echoed back was never set.
+        //
+        // So we GET the login page first. That call:
+        //  - populates the transport's cookie jar (the transport
+        //    replays cookies on subsequent requests automatically, so
+        //    the POST below carries whatever the GET set), and
+        //  - lets us read the hidden fields (the nonce, any redirect_to
+        //    / testcookie markers) out of the form so we can echo them
+        //    back in the POST.
+        $hidden = $this->fetchLoginFormFields($url);
+
+        // The customer-login form (id="login") is a WordPress-style
         // login. Send the WP-standard field names (`log`/`pwd`) and the
         // generic `username`/`password` aliases so the same POST works
-        // whether the upstream reads one pair or the other.
-        $body = http_build_query([
+        // whether the upstream reads one pair or the other. The hidden
+        // fields pulled from the GET (nonce etc.) are merged in FIRST so
+        // our credential fields always win on any name collision.
+        $fields = array_merge($hidden, [
             'log' => $this->username,
             'pwd' => $this->password,
             'username' => $this->username,
             'password' => $this->password,
         ]);
+        $body = http_build_query($fields);
         self::logDebug('Submitting login form', [
             'huntgroup_id' => $this->huntgroupId,
             'url' => $url,
             // Field names only — values omitted as two of them are the
-            // password.
-            'fields' => ['log', 'pwd', 'username', 'password'],
+            // password. The hidden field names appear here too (they are
+            // merged into $fields first) so an operator can confirm the
+            // nonce was actually picked up from the GET.
+            'fields' => array_keys($fields),
+            'hidden_field_count' => count($hidden),
             'body_bytes' => strlen($body),
         ]);
         try {
@@ -503,18 +532,38 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
             'status' => $resp['status'],
         ]);
 
-        // When neither marker matched, the outcome is ambiguous — this
-        // is the case that produces a "logged in on status alone" then
-        // a failed page fetch. Log a short, sanitized snippet of the
-        // response so the actual shape (a re-rendered login form, an
-        // error banner, a hidden nonce field) is visible without
-        // leaking secrets.
+        // When neither outcome marker matched, the result is ambiguous.
+        // We look for two secondary, positive signals in the response
+        // body before deciding:
+        //
+        //  - the authenticated editor's anchor (`id="auto-form"`), which
+        //    only appears once a session is actually established and the
+        //    upstream serves the hunt-group editor; and
+        //  - the login form's own anchor (`id="login"`), whose presence
+        //    means we were bounced back to the login page — i.e. the
+        //    session did NOT take.
+        //
+        // This matters because the default transport follows redirects,
+        // so a rejected or unconfirmed login frequently arrives as a
+        // 200 with the login page re-rendered and NO `notify=failedlogin`
+        // in any URL this layer can see. Previously that fell through to
+        // "proceeding on status", which reported success and then failed
+        // confusingly at the page-parse stage. We now refuse to claim
+        // success without a positive signal.
+        $body = (string) ($resp['body'] ?? '');
+        // Detect the authenticated editor page via the parser's own
+        // XPath anchor rather than a substring, so this success check
+        // can't drift from what parse() actually requires.
+        $hasEditorAnchor = $this->parser->looksLikeEditorPage($body);
+        $hasLoginForm = str_contains($body, 'id="login"');
+
         if (!$failureMatched && !$successMatched) {
             self::logWarning('Login produced no recognised outcome marker; recording sanitized snippet', [
                 'huntgroup_id' => $this->huntgroupId,
                 'status' => $resp['status'],
-                'body_snippet' => $this->sanitizeSnippet((string) ($resp['body'] ?? '')),
-                'has_login_form' => str_contains((string) ($resp['body'] ?? ''), 'id="login"'),
+                'body_snippet' => $this->sanitizeSnippet($body),
+                'has_login_form' => $hasLoginForm,
+                'has_editor_anchor' => $hasEditorAnchor,
             ]);
         }
 
@@ -539,24 +588,177 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
             throw new ForwardingException('Upstream login failed with status ' . $resp['status'] . '.');
         }
 
-        // Prefer a positive success signal when the upstream gives one.
-        // If we have neither marker we fall through and trust the status
-        // (some redirect configurations may not expose the Location to
-        // this layer); the subsequent page GET will still catch an
-        // unauthenticated session via its own 401/403 handling.
+        // Decide the outcome from the strongest signal available:
+        //
+        //  1. An explicit success marker (`logged_in=1`) — best case.
+        //  2. Failing that, the authenticated editor anchor in the body,
+        //     which means the redirect-follow landed us on a real
+        //     hunt-group page (session established).
+        //  3. A re-rendered login form (`id="login"`) is the inverse — a
+        //     positive NEGATIVE signal that the session did not take, so
+        //     we fail fast with a clear "credentials rejected" message.
+        //  4. Otherwise the outcome is genuinely ambiguous. The shipped
+        //     transport FOLLOWS redirects, so a successful login commonly
+        //     lands on a 200 page whose only success marker lived in the
+        //     now-consumed redirect URL — invisible to this layer, since
+        //     request() returns status/body/headers but not the final
+        //     URL. Rather than reject a working session, we proceed on
+        //     status and let the subsequent hunt-group page GET be the
+        //     backstop: an unauthenticated session fails clearly there
+        //     via its own status handling. (Hard-throwing here regressed
+        //     every redirect-following deployment whose landing page is
+        //     neither the editor nor an inline `logged_in=1`.)
         if ($successMatched) {
             self::logInfo('Logged in to upstream (success marker present)', [
                 'huntgroup_id' => $this->huntgroupId,
                 'status' => $resp['status'],
             ]);
-        } else {
-            self::logInfo('Logged in to upstream (no explicit marker; proceeding on status)', [
+            $this->loggedIn = true;
+            return;
+        }
+
+        if ($hasEditorAnchor) {
+            self::logInfo('Logged in to upstream (no marker, but editor page returned)', [
                 'huntgroup_id' => $this->huntgroupId,
                 'status' => $resp['status'],
             ]);
+            $this->loggedIn = true;
+            return;
         }
 
+        if ($hasLoginForm) {
+            self::logError('Upstream login failed: bounced back to the login page', [
+                'huntgroup_id' => $this->huntgroupId,
+                'status' => $resp['status'],
+            ]);
+            throw new ForwardingException(
+                'Upstream login failed: the control panel re-rendered the login page, which usually '
+                . 'means the username or password was rejected. Check Tamar credentials under Settings → Tamar.'
+            );
+        }
+
+        // Ambiguous — no positive signal, but not bounced to the login
+        // page either. Trust the (non-error) status and defer to the page
+        // fetch. The sanitized snippet was already logged above.
+        self::logWarning('Login outcome unconfirmed; proceeding on status and deferring to the page fetch', [
+            'huntgroup_id' => $this->huntgroupId,
+            'status' => $resp['status'],
+            'has_login_form' => $hasLoginForm,
+            'has_editor_anchor' => $hasEditorAnchor,
+        ]);
         $this->loggedIn = true;
+    }
+
+    /**
+     * GET the customer-login page and return the hidden form fields the
+     * subsequent login POST must echo back — chiefly the WordPress
+     * nonce, but also anything else carried as a hidden input in the
+     * login form (`redirect_to`, `testcookie`, plugin-specific tokens).
+     *
+     * We deliberately do NOT throw on a non-200 here. A login page that
+     * answers oddly is best surfaced by the POST attempt and its richer
+     * outcome handling below — bailing out here would turn a recoverable
+     * "no nonce, try the bare POST" into a hard failure. We return what
+     * we can ([] when the GET fails or carries no hidden fields) and let
+     * the POST proceed; on a plain (non-hardened) login the bare POST
+     * still works, exactly as before this GET step existed.
+     *
+     * The transport owns the cookie jar, so the act of issuing this GET
+     * is what establishes session continuity: cookies set in the
+     * response are replayed automatically on the POST. We don't touch
+     * cookies by hand.
+     *
+     * Only password-/secret-shaped hidden field NAMES are dropped (a
+     * login form shouldn't carry those, but a defence in depth): we
+     * never want to blindly replay something the form pre-filled into a
+     * password field. The nonce itself is a token, not a secret to the
+     * server, and must be echoed verbatim.
+     *
+     * @return array<string,string>
+     */
+    private function fetchLoginFormFields(string $url): array
+    {
+        try {
+            $resp = $this->transport->request('GET', $url);
+        } catch (TransportException $e) {
+            // A network failure on the GET is logged but not fatal here;
+            // the POST below will attempt the login and surface a clear
+            // transport error if the host is truly unreachable.
+            self::logWarning('Could not GET the login page before posting; proceeding without nonce', [
+                'huntgroup_id' => $this->huntgroupId,
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
+
+        $status = (int) ($resp['status'] ?? 0);
+        $html = (string) ($resp['body'] ?? '');
+        if ($status >= 400 || $html === '') {
+            self::logWarning('Login-page GET returned no usable form; proceeding without nonce', [
+                'huntgroup_id' => $this->huntgroupId,
+                'status' => $status,
+                'body_bytes' => strlen($html),
+            ]);
+            return [];
+        }
+
+        $hidden = $this->extractLoginHiddenFields($html);
+        self::logDebug('Fetched login page; extracted hidden form fields', [
+            'huntgroup_id' => $this->huntgroupId,
+            'status' => $status,
+            'hidden_field_names' => array_keys($hidden),
+        ]);
+        return $hidden;
+    }
+
+    /**
+     * Pull the hidden `<input>` name/value pairs out of the login form
+     * (`<form id="login">`). Falls back to scanning the whole document
+     * if the form id can't be located, so a markup change that drops or
+     * renames the form id still recovers the nonce rather than silently
+     * posting without it.
+     *
+     * @return array<string,string>
+     */
+    private function extractLoginHiddenFields(string $html): array
+    {
+        $xpath = new \DOMXPath(HtmlDocument::load($html));
+
+        // Prefer hidden inputs inside the named login form. If the form
+        // id is absent (markup drift), fall back to the FIRST form on the
+        // page rather than every hidden input in the document. Scanning
+        // the whole document would scoop hidden inputs from unrelated
+        // forms (lost-password, search, language switchers) and, because
+        // we key the result by field name, a second form's `_wpnonce` or
+        // `redirect_to` could overwrite the login form's via last-write-
+        // wins — making us POST an invalid nonce.
+        $nodes = $xpath->query("//form[@id='login']//input[@type='hidden']");
+        if ($nodes === false || $nodes->length === 0) {
+            $nodes = $xpath->query("(//form)[1]//input[@type='hidden']");
+        }
+        if ($nodes === false) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($nodes as $node) {
+            if (!$node instanceof \DOMElement) {
+                continue;
+            }
+            $name = $node->getAttribute('name');
+            if ($name === '') {
+                continue;
+            }
+            // Defence in depth: never blindly replay a pre-filled
+            // password/secret-shaped hidden field. The nonce is fine —
+            // it's not matched by this pattern.
+            if (preg_match('/(pass|pwd|secret)/i', $name) === 1) {
+                continue;
+            }
+            $out[$name] = $node->getAttribute('value');
+        }
+        return $out;
     }
 
     /**

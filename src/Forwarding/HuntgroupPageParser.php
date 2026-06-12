@@ -167,6 +167,28 @@ final class HuntgroupPageParser
     }
 
     /**
+     * Authoritative "is this the authenticated hunt-group editor page?"
+     * check, for callers (chiefly the login flow) that need to tell the
+     * editor page from a re-rendered login page before committing to a
+     * full {@see parse()}.
+     *
+     * It uses the same `//form[@id='auto-form']` anchor that parse()
+     * keys off, so login-success detection and the later parse share a
+     * single definition of "the editor page" and can't diverge — a
+     * markup or quoting change that breaks the parse can no longer let
+     * login report success.
+     */
+    public function looksLikeEditorPage(string $html): bool
+    {
+        if (trim($html) === '') {
+            return false;
+        }
+
+        $xpath = new \DOMXPath($this->loadDocument($html));
+        return $xpath->query("//form[@id='auto-form']")->item(0) instanceof \DOMElement;
+    }
+
+    /**
      * Extract the top-level fields above the rota table.
      *
      * @return array<string,mixed>
@@ -458,12 +480,6 @@ final class HuntgroupPageParser
 
     private function loadDocument(string $html): \DOMDocument
     {
-        $previous = libxml_use_internal_errors(true);
-        $doc = new \DOMDocument();
-        $prepared = '<?xml encoding="utf-8"?>' . $html;
-        $doc->loadHTML($prepared, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOWARNING | LIBXML_NOERROR);
-        libxml_clear_errors();
-        libxml_use_internal_errors($previous);
-        return $doc;
+        return HtmlDocument::load($html);
     }
 }
