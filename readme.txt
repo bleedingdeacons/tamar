@@ -4,7 +4,7 @@ Tags: call-forwarding, telephony, pbx, beacon, tamar-telecommunications
 Requires at least: 6.1
 Tested up to: 6.9
 Stable tag: 1.2.2
-Build date: 2026/06/12 22:00:53
+Build date: 2026/06/13 01:20:07
 Requires PHP: 8.1
 License: MIT (Modified — No Resale)
 
