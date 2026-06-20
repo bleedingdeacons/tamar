@@ -1,17 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="8340ebef-738b-4321-a4f1-05d11862c5b0" name="Changes" comment="basic working overview.">
-      <change beforePath="$PROJECT_DIR$/../beacon/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../beacon/beacon.php" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/beacon.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../beacon/readme.txt" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/readme.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../beacon/src/Plugin.php" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/src/Plugin.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../beacon/tests/bootstrap.php" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/tests/bootstrap.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/readme.txt" beforeDir="false" afterPath="$PROJECT_DIR$/readme.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tamar.php" beforeDir="false" afterPath="$PROJECT_DIR$/tamar.php" afterDir="false" />
-    </list>
+    <list default="true" id="8340ebef-738b-4321-a4f1-05d11862c5b0" name="Changes" comment="bump for release." />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -169,7 +159,7 @@
       <workItem from="1781900231001" duration="4224000" />
       <workItem from="1781963959962" duration="2009000" />
       <workItem from="1781967880978" duration="160000" />
-      <workItem from="1781968215110" duration="8828000" />
+      <workItem from="1781968215110" duration="9505000" />
     </task>
     <task id="LOCAL-00001" summary="basic working overview.">
       <option name="closed" value="true" />
@@ -179,7 +169,23 @@
       <option name="project" value="LOCAL" />
       <updated>1781981105889</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Added rest api to beacon.">
+      <option name="closed" value="true" />
+      <created>1781982875239</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1781982875239</updated>
+    </task>
+    <task id="LOCAL-00003" summary="bump for release.">
+      <option name="closed" value="true" />
+      <created>1781982890705</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1781982890705</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -187,7 +193,9 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="basic working overview." />
-    <option name="LAST_COMMIT_MESSAGE" value="basic working overview." />
+    <MESSAGE value="Added rest api to beacon." />
+    <MESSAGE value="bump for release." />
+    <option name="LAST_COMMIT_MESSAGE" value="bump for release." />
   </component>
   <component name="WordPressConfiguration" enabled="true">
     <wordpressPath>C:\Users\David\Local Sites\stalwart-dev\app\public</wordpressPath>
