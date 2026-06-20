@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="8340ebef-738b-4321-a4f1-05d11862c5b0" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/tamar.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tamar.iml" afterDir="false" />
+    <list default="true" id="8340ebef-738b-4321-a4f1-05d11862c5b0" name="Changes" comment="basic working overview.">
+      <change beforePath="$PROJECT_DIR$/../beacon/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../beacon/beacon.php" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/beacon.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../beacon/readme.txt" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/readme.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../beacon/src/Plugin.php" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/src/Plugin.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../beacon/tests/bootstrap.php" beforeDir="false" afterPath="$PROJECT_DIR$/../beacon/tests/bootstrap.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Admin/SettingsPage.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/Admin/SettingsPage.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Admin/TamarSettings.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/Admin/TamarSettings.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Core/TamarServiceProvider.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/Core/TamarServiceProvider.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Forwarding/HuntgroupCallForwardingService.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/Forwarding/HuntgroupCallForwardingService.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/Unit/HuntgroupCallForwardingServiceTest.php" beforeDir="false" afterPath="$PROJECT_DIR$/tests/Unit/HuntgroupCallForwardingServiceTest.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/bootstrap.php" beforeDir="false" afterPath="$PROJECT_DIR$/tests/bootstrap.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/readme.txt" beforeDir="false" afterPath="$PROJECT_DIR$/readme.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tamar.php" beforeDir="false" afterPath="$PROJECT_DIR$/tamar.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -27,7 +27,7 @@
     <execution />
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../beacon" />
   </component>
   <component name="PhpDebugGeneral" listening_started="true" max_simultaneous_connections="6" xdebug_force_break_when_no_path_mapping="false" xdebug_force_break_when_outside_project="false" />
   <component name="PhpServers">
@@ -77,6 +77,41 @@
       <path value="$PROJECT_DIR$/vendor/squizlabs/php_codesniffer" />
       <path value="$PROJECT_DIR$/vendor/antecedent/patchwork" />
       <path value="$PROJECT_DIR$/vendor/szepeviktor/phpstan-wordpress" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/myclabs/deep-copy" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/szepeviktor/phpstan-wordpress" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/cli-parser" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/code-unit" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/code-unit-reverse-lookup" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/comparator" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/complexity" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/diff" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/environment" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/antecedent/patchwork" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/exporter" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/global-state" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/lines-of-code" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/object-enumerator" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/object-reflector" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/recursion-context" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/php-stubs/wordpress-stubs" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/type" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/sebastian/version" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/symfony/polyfill-php73" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/10up/wp_mock" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/mockery/mockery" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/theseer/tokenizer" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/squizlabs/php_codesniffer" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phar-io/manifest" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phar-io/version" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phpunit/php-code-coverage" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phpunit/php-file-iterator" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phpstan/phpstan" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phpunit/php-invoker" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/nikic/php-parser" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phpunit/php-text-template" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phpunit/php-timer" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/hamcrest/hamcrest-php" />
+      <path value="$PROJECT_DIR$/../beacon/vendor/phpunit/phpunit" />
     </include_path>
   </component>
   <component name="ProjectColorInfo">{
@@ -134,25 +169,27 @@
       <workItem from="1781900231001" duration="4224000" />
       <workItem from="1781963959962" duration="2009000" />
       <workItem from="1781967880978" duration="160000" />
-      <workItem from="1781968215110" duration="7314000" />
+      <workItem from="1781968215110" duration="8828000" />
     </task>
+    <task id="LOCAL-00001" summary="basic working overview.">
+      <option name="closed" value="true" />
+      <created>1781981105888</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1781981105889</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="basic working overview." />
+    <option name="LAST_COMMIT_MESSAGE" value="basic working overview." />
+  </component>
   <component name="WordPressConfiguration" enabled="true">
     <wordpressPath>C:\Users\David\Local Sites\stalwart-dev\app\public</wordpressPath>
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" type="php">
-          <url>file://$PROJECT_DIR$/src/Forwarding/HuntgroupCallForwardingService.php</url>
-          <line>144</line>
-          <option name="timeStamp" value="11" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>
