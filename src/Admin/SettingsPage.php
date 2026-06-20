@@ -196,9 +196,13 @@ final class SettingsPage
         echo '<td><input id="tamar-rules-path" name="rules_path" type="text" class="regular-text" value="' . esc_attr($settings['rules_path']) . '"' . $disabled . '>';
         echo '<p class="description">' . esc_html__('GET endpoint for the editor. Default: /phonedivert/huntgroup', 'tamar') . '</p></td></tr>';
 
-        echo '<tr><th><label for="tamar-login-path">' . esc_html__('Login path', 'tamar') . '</label></th>';
+        echo '<tr><th><label for="tamar-login-path">' . esc_html__('Login page path', 'tamar') . '</label></th>';
         echo '<td><input id="tamar-login-path" name="login_path" type="text" class="regular-text" value="' . esc_attr($settings['login_path']) . '"' . $disabled . '>';
-        echo '<p class="description">' . esc_html__('Default: /customer-login/', 'tamar') . '</p></td></tr>';
+        echo '<p class="description">' . esc_html__('GET endpoint that sets the session cookie. Default: /phonedivert/login', 'tamar') . '</p></td></tr>';
+
+        echo '<tr><th><label for="tamar-login-submit-path">' . esc_html__('Login submit path', 'tamar') . '</label></th>';
+        echo '<td><input id="tamar-login-submit-path" name="login_submit_path" type="text" class="regular-text" value="' . esc_attr($settings['login_submit_path']) . '"' . $disabled . '>';
+        echo '<p class="description">' . esc_html__('POST target for the username/password. Default: /phonedivert/login.php', 'tamar') . '</p></td></tr>';
 
         echo '<tr><th><label for="tamar-commit-path">' . esc_html__('Update path', 'tamar') . '</label></th>';
         echo '<td><input id="tamar-commit-path" name="commit_path" type="text" class="regular-text" value="' . esc_attr($settings['commit_path']) . '"' . $disabled . '>';

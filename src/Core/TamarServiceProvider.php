@@ -91,6 +91,7 @@ final class TamarServiceProvider
                 huntgroupId: (string) $settings['huntgroup_id'],
                 rulesPath: $settings['rules_path'],
                 loginPath: $settings['login_path'],
+                loginSubmitPath: $settings['login_submit_path'],
                 updatePath: $settings['commit_path'],
             );
         });

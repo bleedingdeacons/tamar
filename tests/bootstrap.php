@@ -24,7 +24,10 @@ require_once __DIR__ . '/../../beacon/tests/stubs/Psr/Container/NotFoundExceptio
 require_once __DIR__ . '/../../beacon/tests/stubs/Psr/Container/ContainerInterface.php';
 
 // Beacon source — Tamar depends on its interfaces and base class.
+// HasLogger must load first: AbstractCallForwardingService uses it, and
+// the trait is a safe no-op when the Sentinel logger isn't present.
 $beaconSrc = __DIR__ . '/../../beacon/src';
+require_once $beaconSrc . '/Logger/HasLogger.php';
 require_once $beaconSrc . '/Forwarding/Interfaces/CallForwardingService.php';
 require_once $beaconSrc . '/Forwarding/Interfaces/ForwardingException.php';
 require_once $beaconSrc . '/Forwarding/Models/ForwardingRule.php';

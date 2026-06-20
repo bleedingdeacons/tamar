@@ -46,6 +46,7 @@ final class TamarSettings
      *   password_cipher:string,
      *   rules_path:string,
      *   login_path:string,
+     *   login_submit_path:string,
      *   commit_path:string,
      *   huntgroup_id:string,
      *   verify_tls:bool,
@@ -63,7 +64,8 @@ final class TamarSettings
             'username' => (string) ($raw['username'] ?? ''),
             'password_cipher' => (string) ($raw['password_cipher'] ?? ''),
             'rules_path' => (string) ($raw['rules_path'] ?? '/phonedivert/huntgroup'),
-            'login_path' => (string) ($raw['login_path'] ?? '/customer-login/'),
+            'login_path' => (string) ($raw['login_path'] ?? '/phonedivert/login'),
+            'login_submit_path' => (string) ($raw['login_submit_path'] ?? '/phonedivert/login.php'),
             'commit_path' => (string) ($raw['commit_path'] ?? '/phonedivert/huntgroup/update'),
             // Per-client numeric ID from the upstream edit URL
             // (…/huntgroup?huntgroup=<id>). Stored digits-only — see
@@ -99,6 +101,7 @@ final class TamarSettings
             'password_cipher' => $cipher,
             'rules_path' => self::sanitisePath((string) ($input['rules_path'] ?? $existing['rules_path'])),
             'login_path' => self::sanitisePath((string) ($input['login_path'] ?? $existing['login_path'])),
+            'login_submit_path' => self::sanitisePath((string) ($input['login_submit_path'] ?? $existing['login_submit_path'])),
             'commit_path' => self::sanitisePath((string) ($input['commit_path'] ?? $existing['commit_path'])),
             // The upstream hunt group ID is numeric (e.g. 157626). Strip
             // anything that isn't a digit so a pasted value like
