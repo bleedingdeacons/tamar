@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Control Panel - Hunt group administration</title>
+  <meta charset="utf-8" />
+  <meta name="robots" content="nofollow,noarchive" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    NOTE: This fixture is a faithful copy of the real Tamar hunt-group
+    LIST page (GET /phonedivert/huntgroup with no ?huntgroup= query),
+    captured after login. The large inline <style>/<script> blocks and
+    the marketing modals from the live page have been trimmed because
+    they are irrelevant to parsing — the DOM structure the parser keys
+    off (the <form id="huntgroup-form"> and its <select name="huntgroup">)
+    is preserved verbatim. If Tamar changes that markup, recapture from a
+    fresh control-panel response rather than hand-editing this file.
+  -->
+</head>
+
+<body>
+
+<div class="container container-main">
+<div>
+  <header>
+    <div class="container toptoolbar">
+      <h1 class="d-flex mb-0 p-1 p-md-4 pt-md-1 pb-md-2"><a href="/phonedivert/huntgroup/">Hunt group administration</a></h1>
+    </div>
+  </header>
+
+    <section class="mobileBump">
+      <article class='container'>
+
+<fieldset class="p-4">
+<h5 class="d-block d-md-none header-title">Hunt Groups</h5>
+
+<h5 class="d-none d-md-block">Select an existing Hunt Group or create new</h5>
+
+<div class="d-none d-md-block">
+<p>To view or to make changes to an existing hunt-group, select the hunt-group from the drop down and then select <q>View/Edit</q>.</p>
+</div>
+
+<form action="/phonedivert/huntgroup#huntgroup" id="huntgroup-form">
+
+
+<div class="col-md-12 col-lg-8">
+<div class="input-group">
+
+<select name="huntgroup" id="huntgroup" size="1" class="form-control form-select">
+<option value="none" disabled="disabled">Select from list:</option>
+<option value="157626" id="157626">New Rota</option>
+</select>
+
+<input type="submit" class="btn btn-secondary"  id="edit" value="View/Edit"/>
+</form>
+<button type="button" class="btn btn-primary  huntgroup_create_new_button" id="create"/>Create New</button>
+</div>
+</div>
+</form>
+
+</fieldset>
+
+<div class="scroll"></div>
+<fieldset id="create-huntgroup" class="p-4 " style="display:none;">
+    <legend>Create A New Huntgroup</legend>
+
+    <form action="/phonedivert/huntgroup/create" method="post">
+
+<div class="col-md-6">
+<label for="description" class="w-100 pb-2">Description</label>
+<div class="input-group">
+    <input class="form-control" type="text" name="description" placeholder="Name for this huntgroup"/>
+    <input type="submit" value="Create" class="btn btn-success btn-primary"/>
+</div>
+</div>
+
+    </form>
+</fieldset>
+
+        </article>
+      </section>
+
+	<footer class="d-none d-md-block">
+		<span>Logged in as account 1036652</span>
+		<a href='/phonedivert/logout/' class='logout-btn'>Logout</a>
+	</footer>
+
+</div>
+</div>
+
+</body>
+</html>

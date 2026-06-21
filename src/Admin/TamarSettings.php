@@ -104,10 +104,9 @@ final class TamarSettings
             'login_submit_path' => self::sanitisePath((string) ($input['login_submit_path'] ?? $existing['login_submit_path'])),
             'commit_path' => self::sanitisePath((string) ($input['commit_path'] ?? $existing['commit_path'])),
             // The upstream hunt group ID is numeric (e.g. 157626). Strip
-            // anything that isn't a digit so a pasted value like
-            // "#157626" or a trailing space can't break the
-            // ?huntgroup= query param. An empty result is allowed —
-            // it just means "not configured yet".
+            // anything that isn't a digit so a pasted value like "#157626"
+            // or a trailing space can't break the ?huntgroup= query param.
+            // An empty result is allowed — it just means "not configured yet".
             'huntgroup_id' => preg_replace('/\D+/', '', (string) ($input['huntgroup_id'] ?? $existing['huntgroup_id'])) ?? '',
             'verify_tls' => !empty($input['verify_tls']),
             'timeout' => max(1, min(120, (int) ($input['timeout'] ?? $existing['timeout']))),

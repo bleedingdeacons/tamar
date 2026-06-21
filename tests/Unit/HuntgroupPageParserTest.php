@@ -139,8 +139,56 @@ final class HuntgroupPageParserTest extends TestCase
         self::assertSame('', $result['csrf']);
     }
 
+    // -- hunt-group list page --------------------------------------------
+
+    public function test_parses_huntgroup_list_into_id_name_pairs(): void
+    {
+        $groups = $this->parser->parseHuntgroupList($this->listFixture());
+
+        self::assertSame(
+            [['id' => '157626', 'name' => 'New Rota']],
+            $groups
+        );
+    }
+
+    public function test_huntgroup_list_skips_the_disabled_placeholder_option(): void
+    {
+        $groups = $this->parser->parseHuntgroupList($this->listFixture());
+
+        // The "Select from list:" placeholder (value="none", disabled)
+        // must never surface as a selectable hunt group.
+        $ids = array_map(static fn(array $g): string => $g['id'], $groups);
+        self::assertNotContains('none', $ids);
+    }
+
+    public function test_huntgroup_list_returns_empty_when_account_has_no_groups(): void
+    {
+        // The select is present but holds only the placeholder — a valid
+        // "no hunt groups yet" state, not an error.
+        $html = '<select name="huntgroup"><option value="none" disabled>Select from list:</option></select>';
+        self::assertSame([], $this->parser->parseHuntgroupList($html));
+    }
+
+    public function test_huntgroup_list_throws_on_empty_html(): void
+    {
+        $this->expectException(ForwardingException::class);
+        $this->parser->parseHuntgroupList('');
+    }
+
+    public function test_huntgroup_list_throws_when_chooser_select_absent(): void
+    {
+        // A login-page (or any non-list) response has no huntgroup select.
+        $this->expectException(ForwardingException::class);
+        $this->parser->parseHuntgroupList('<html><body><form action="/login"><input name="username"></form></body></html>');
+    }
+
     private function fixture(): string
     {
         return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_157626.html');
+    }
+
+    private function listFixture(): string
+    {
+        return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_list.html');
     }
 }

@@ -200,6 +200,30 @@ final class HuntgroupCallForwardingServiceTest extends TestCase
         $service->listRules();
     }
 
+    public function test_listHuntgroups_logs_in_and_reads_the_chooser(): void
+    {
+        $transport = new FakeHttpTransport([
+            'default' => $this->fixture(),
+            'list' => $this->listFixture(),
+        ]);
+        $service = $this->makeService($transport);
+
+        $groups = $service->listHuntgroups();
+
+        self::assertSame([['id' => '157626', 'name' => 'New Rota']], $groups);
+
+        // The chooser is fetched from the huntgroup endpoint with NO
+        // ?huntgroup= query — that's what makes the upstream render the
+        // list rather than a pre-scoped editor.
+        $listGets = array_values(array_filter(
+            $transport->log,
+            fn($e) => $e['method'] === 'GET'
+                && str_contains($e['url'], '/phonedivert/huntgroup')
+                && !str_contains($e['url'], 'huntgroup=')
+        ));
+        self::assertCount(1, $listGets);
+    }
+
     // -- helpers ----------------------------------------------------------
 
     private function makeService(FakeHttpTransport $transport): HuntgroupCallForwardingService
@@ -218,6 +242,11 @@ final class HuntgroupCallForwardingServiceTest extends TestCase
     private function fixture(): string
     {
         return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_157626.html');
+    }
+
+    private function listFixture(): string
+    {
+        return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_list.html');
     }
 
     /**
@@ -281,8 +310,15 @@ final class FakeHttpTransport implements HttpTransport
             if ($status !== 200) {
                 return ['status' => $status, 'headers' => [], 'body' => ''];
             }
-            $body = ($this->config['login_fails'] ?? false) === true ? $this->loginPage() : $this->config['default'];
-            return ['status' => 200, 'headers' => [], 'body' => $body];
+            if (($this->config['login_fails'] ?? false) === true) {
+                return ['status' => 200, 'headers' => [], 'body' => $this->loginPage()];
+            }
+            // The chooser (list) page is the same endpoint with NO
+            // ?huntgroup= query; the editor page carries the query.
+            if (!str_contains($url, 'huntgroup=') && isset($this->config['list'])) {
+                return ['status' => 200, 'headers' => [], 'body' => $this->config['list']];
+            }
+            return ['status' => 200, 'headers' => [], 'body' => $this->config['default']];
         }
 
         // POST the rota update.

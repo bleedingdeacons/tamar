@@ -153,6 +153,37 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         return true;
     }
 
+    // -- hunt-group discovery (Tamar-specific, not part of the contract) --
+
+    /**
+     * List the hunt groups available on the account, as `{id, name}`
+     * pairs, by logging in and reading the chooser on the hunt-group
+     * list page (the editor URL minus the `?huntgroup=` query).
+     *
+     * This is deliberately independent of {@see $huntgroupId}: it's what
+     * the settings page calls to let an operator pick *which* hunt group
+     * to manage by name, including on a fresh install before any id has
+     * been chosen.
+     *
+     * @return array<int,array{id:string,name:string}>
+     * @throws ForwardingException
+     */
+    public function listHuntgroups(): array
+    {
+        $this->ensureLoggedIn();
+
+        $resp = $this->request('GET', $this->listUrl());
+        if ($resp['status'] >= 400) {
+            throw new ForwardingException(
+                'Upstream returned status ' . $resp['status'] . ' when fetching the hunt-group list.'
+            );
+        }
+
+        $groups = $this->parser->parseHuntgroupList($resp['body']);
+        self::logInfo('Listed hunt groups', ['count' => count($groups)]);
+        return $groups;
+    }
+
     // -- login -----------------------------------------------------------
 
     /**
@@ -267,6 +298,29 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         $base = rtrim($this->baseUrl, '/') . $this->rulesPath;
         $sep = str_contains($base, '?') ? '&' : '?';
         return $base . $sep . 'huntgroup=' . rawurlencode($this->huntgroupId);
+    }
+
+    /**
+     * The hunt-group *list* URL: the same endpoint as the editor but
+     * with no `?huntgroup=` query, which the upstream renders as the
+     * chooser of all hunt groups. Any query already baked into the
+     * configured path is stripped so we always hit the list, not a
+     * pre-scoped editor.
+     *
+     * A trailing slash is enforced because the canonical chooser lives at
+     * `…/phonedivert/huntgroup/` — the editor `rules_path` is the
+     * slash-less `…/phonedivert/huntgroup`, and hitting that directly only
+     * works by 301 redirect. We request the canonical URL outright.
+     */
+    private function listUrl(): string
+    {
+        $path = $this->rulesPath;
+        $queryPos = strpos($path, '?');
+        if ($queryPos !== false) {
+            $path = substr($path, 0, $queryPos);
+        }
+        $path = rtrim($path, '/') . '/';
+        return rtrim($this->baseUrl, '/') . $path;
     }
 
     /**

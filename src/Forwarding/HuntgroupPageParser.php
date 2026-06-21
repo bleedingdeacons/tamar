@@ -189,6 +189,71 @@ final class HuntgroupPageParser
     }
 
     /**
+     * Parse the hunt-group *list* page — GET /phonedivert/huntgroup with
+     * no `?huntgroup=` query — into the available hunt groups.
+     *
+     * The list page is a chooser, not an editor: a single
+     * `<select name="huntgroup">` whose `<option value="<id>">Name</option>`
+     * entries are the account's hunt groups, preceded by a disabled
+     * `value="none"` placeholder ("Select from list:"). We key on that
+     * select's name — it's absent from the editor page (which only has
+     * greeting/voicemail/hunting selects), so this doubles as a "did we
+     * actually land on the list page?" check.
+     *
+     * Returns `[]` for an account with no hunt groups (the select is
+     * present but holds only the placeholder). Throws when the select is
+     * missing entirely — that means the upstream handed us something
+     * other than the list page (most likely the login page because the
+     * session didn't take).
+     *
+     * @return array<int,array{id:string,name:string}>
+     * @throws ForwardingException
+     */
+    public function parseHuntgroupList(string $html): array
+    {
+        if (trim($html) === '') {
+            self::logError('Hunt-group list page HTML was empty');
+            throw new ForwardingException('Hunt-group list page HTML was empty.');
+        }
+
+        $xpath = new \DOMXPath($this->loadDocument($html));
+        $select = $xpath->query("//select[@name='huntgroup']")->item(0);
+        if (!$select instanceof \DOMElement) {
+            self::logError('Hunt-group list page missing the expected huntgroup select');
+            throw new ForwardingException(
+                'Hunt-group list page did not contain the expected hunt-group chooser. '
+                . 'The upstream may have redirected us to the login page, or its admin UI has changed shape.'
+            );
+        }
+
+        $options = $xpath->query(".//option", $select);
+        if ($options === false) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($options as $option) {
+            if (!$option instanceof \DOMElement) {
+                continue;
+            }
+            // Skip the disabled "Select from list:" placeholder and any
+            // empty / sentinel value. The id is the upstream's numeric
+            // hunt group id; the visible text is the operator-facing name.
+            $id = trim($option->getAttribute('value'));
+            if ($id === '' || $id === 'none' || $option->hasAttribute('disabled')) {
+                continue;
+            }
+            $out[] = [
+                'id' => $id,
+                'name' => trim($option->textContent),
+            ];
+        }
+
+        self::logDebug('Hunt-group list parsed', ['count' => count($out)]);
+        return $out;
+    }
+
+    /**
      * Extract the top-level fields above the rota table.
      *
      * @return array<string,mixed>

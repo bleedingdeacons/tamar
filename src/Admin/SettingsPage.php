@@ -11,6 +11,7 @@ if (!defined('ABSPATH')) {
 use Psr\Container\ContainerInterface;
 use Beacon\Forwarding\Interfaces\CallForwardingService;
 use Beacon\Forwarding\Interfaces\ForwardingException;
+use Tamar\Forwarding\HuntgroupCallForwardingService;
 
 /**
  * Tamar's admin settings page.
@@ -208,13 +209,15 @@ final class SettingsPage
         echo '<td><input id="tamar-commit-path" name="commit_path" type="text" class="regular-text" value="' . esc_attr($settings['commit_path']) . '"' . $disabled . '>';
         echo '<p class="description">' . esc_html__('POST endpoint that saves the rota. Default: /phonedivert/huntgroup/update', 'tamar') . '</p></td></tr>';
 
-        // Hunt-group ID — appended to the rules path as a query string
-        // (?huntgroup=<id>). The upstream's edit URL is per-client, so
-        // this number is what scopes Tamar to *this* WordPress site's
-        // hunt group rather than every hunt group on the account.
-        echo '<tr><th><label for="tamar-huntgroup-id">' . esc_html__('Hunt group ID', 'tamar') . '</label></th>';
-        echo '<td><input id="tamar-huntgroup-id" name="huntgroup_id" type="text" class="regular-text" value="' . esc_attr($settings['huntgroup_id']) . '"' . $disabled . '>';
-        echo '<p class="description">' . esc_html__('Numeric ID from the upstream edit URL — e.g. 157626 in ".../huntgroup?huntgroup=157626".', 'tamar') . '</p></td></tr>';
+        // Hunt group — the numeric id still scopes every upstream request
+        // (?huntgroup=<id>), but once a successful "Save and test
+        // connection" has fetched the account's hunt groups we let the
+        // operator pick by NAME from a dropdown rather than pasting a
+        // bare number. Before that (or if the list can't be fetched) we
+        // fall back to the raw id field. See renderHuntgroupField().
+        echo '<tr><th><label for="tamar-huntgroup-id">' . esc_html__('Hunt group', 'tamar') . '</label></th><td>';
+        $this->renderHuntgroupField($settings, $disabled);
+        echo '</td></tr>';
 
         echo '<tr><th><label for="tamar-verify-tls">' . esc_html__('Verify TLS certificate', 'tamar') . '</label></th>';
         echo '<td><label><input id="tamar-verify-tls" name="verify_tls" type="checkbox" value="1"' . checked($settings['verify_tls'], true, false) . $disabled . '> ' . esc_html__('Recommended on; disable only for development against a self-signed certificate.', 'tamar') . '</label></td></tr>';
@@ -307,11 +310,151 @@ final class SettingsPage
         try {
             /** @var CallForwardingService $service */
             $service = $this->container->get(CallForwardingService::class);
-            $service->testConnection();
-            $this->setFlash('success', __('Connection OK — Tamar reached the upstream and parsed the rules page.', 'tamar'));
+
+            // A non-Tamar driver swapped in via tamar/register_services
+            // can't list hunt groups — keep the plain contract behaviour.
+            if (!$service instanceof HuntgroupCallForwardingService) {
+                $service->testConnection();
+                $this->setFlash('success', __('Connection OK — Tamar reached the upstream and parsed the rules page.', 'tamar'));
+                return;
+            }
+
+            // Log in and read the hunt-group chooser first — independent
+            // of the configured id — so we can name the configured group
+            // and report how many are available.
+            $groups = $service->listHuntgroups();
+
+            $settings = TamarSettings::load();
+            if ($settings['huntgroup_id'] !== '') {
+                // An id is configured — confirm its editor actually loads.
+                $service->testConnection();
+                $name = $this->huntgroupName($groups, $settings['huntgroup_id']);
+                $this->setFlash('success', sprintf(
+                    /* translators: %s: hunt group name or numeric id. */
+                    __('Connection OK — reached the upstream and loaded hunt group "%s".', 'tamar'),
+                    $name !== '' ? $name : $settings['huntgroup_id']
+                ));
+                return;
+            }
+
+            // Logged in, but no hunt group chosen yet — prompt the operator
+            // to pick one from the freshly populated dropdown.
+            $this->setFlash('success', sprintf(
+                /* translators: %d: number of hunt groups found on the account. */
+                _n(
+                    'Connected — %d hunt group found. Choose it below and save.',
+                    'Connected — %d hunt groups found. Choose one below and save.',
+                    count($groups),
+                    'tamar'
+                ),
+                count($groups)
+            ));
         } catch (\Throwable $e) {
             $this->setFlash('error', __('Connection failed: ', 'tamar') . $e->getMessage());
         }
+    }
+
+    /**
+     * Render the hunt-group chooser: a name dropdown when we have a
+     * cached list (from a successful connection test), otherwise the raw
+     * numeric-id field. The field name is `huntgroup_id` either way, so
+     * {@see TamarSettings::save()} stores the upstream id unchanged.
+     *
+     * @param array<string,mixed> $settings
+     */
+    private function renderHuntgroupField(array $settings, string $disabled): void
+    {
+        $groups = $this->fetchHuntgroups();
+        $current = (string) $settings['huntgroup_id'];
+
+        if ($groups === []) {
+            echo '<input id="tamar-huntgroup-id" name="huntgroup_id" type="text" class="regular-text" value="' . esc_attr($current) . '"' . $disabled . '>';
+            echo '<p class="description">'
+                . esc_html__('Once your credentials above are saved and Tamar can reach the control panel, this becomes a name dropdown automatically. Until then, paste the numeric ID from the upstream edit URL — e.g. 157626 in ".../huntgroup?huntgroup=157626".', 'tamar')
+                . '</p>';
+            return;
+        }
+
+        echo '<select id="tamar-huntgroup-id" name="huntgroup_id" class="regular-text"' . $disabled . '>';
+        echo '<option value="">' . esc_html__('— Select a hunt group —', 'tamar') . '</option>';
+        $found = false;
+        foreach ($groups as $group) {
+            $id = (string) ($group['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $isSelected = $id === $current;
+            $found = $found || $isSelected;
+            echo '<option value="' . esc_attr($id) . '"' . selected($isSelected, true, false) . '>'
+                . esc_html((string) ($group['name'] ?? $id))
+                . '</option>';
+        }
+        // A configured id that's no longer in the fetched list (renamed or
+        // removed upstream) is kept as an explicit selected option so a
+        // save doesn't silently wipe the operator's existing scope.
+        if (!$found && $current !== '') {
+            echo '<option value="' . esc_attr($current) . '" selected>'
+                . esc_html(sprintf(/* translators: %s: numeric hunt group id. */ __('Current ID %s (not in list)', 'tamar'), $current))
+                . '</option>';
+        }
+        echo '</select> ';
+        // Refresh re-runs the live fetch by reloading the page (GET), so
+        // the dropdown reflects the upstream again. It's a link, not a
+        // <button>, so it never submits/saves the surrounding form.
+        echo '<a href="' . esc_url(admin_url('admin.php?page=' . self::SETTINGS_SLUG)) . '" class="button">'
+            . esc_html__('Refresh', 'tamar') . '</a>';
+        echo '<p class="description">' . esc_html__('Pick the hunt group to manage. Use Refresh to reload the list from Tamar.', 'tamar') . '</p>';
+    }
+
+    /**
+     * Fetch the hunt-group list for the dropdown, live, on every render.
+     *
+     * We log in and read the chooser each time the settings page is shown
+     * so the name dropdown always reflects the upstream — nothing is
+     * cached. Best-effort: any failure (no credentials yet, upstream down,
+     * a non-Tamar driver) falls back to the numeric-id field rather than
+     * surfacing an error on a page the operator may just be viewing.
+     *
+     * @return array<int,array{id:string,name:string}>
+     */
+    private function fetchHuntgroups(): array
+    {
+        // No point attempting a login until the connection is configured.
+        $settings = TamarSettings::load();
+        if ($settings['base_url'] === '' || $settings['username'] === '' || TamarSettings::password() === '') {
+            return [];
+        }
+
+        if (!$this->container->has(CallForwardingService::class)) {
+            return [];
+        }
+        $service = $this->container->get(CallForwardingService::class);
+        if (!$service instanceof HuntgroupCallForwardingService) {
+            return [];
+        }
+
+        try {
+            return $service->listHuntgroups();
+        } catch (\Throwable $e) {
+            self::logWarning('Could not load hunt groups for the settings page', ['error' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    /**
+     * Resolve a hunt group's display name from a fetched list, or '' if
+     * the id isn't among them.
+     *
+     * @param array<int,array{id:string,name:string}> $groups
+     */
+    private function huntgroupName(array $groups, string $id): string
+    {
+        foreach ($groups as $group) {
+            if ((string) ($group['id'] ?? '') === $id) {
+                return (string) ($group['name'] ?? '');
+            }
+        }
+        return '';
     }
 
     public function handleCommit(): void
