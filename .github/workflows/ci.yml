@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: PHP 8.1
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          # zip: build.php assembles the release archive with ZipArchive.
+          extensions: mbstring, intl, json, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          # Keyed on composer.json: composer.lock is untracked in several of
+          # these repos, so it is not a reliable cache key across the suite.
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php8.1-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php8.1-composer-
+
+      # --- Gates -----------------------------------------------------------
+      # These fail the build. Each is verified to pass in this repo today.
+
+      - name: Validate composer.json
+        # --no-check-lock: composer.lock is untracked in some repos and drifted
+        # from composer.json in others. Lock state is reported as advisory
+        # rather than blocking every PR in the suite.
+        run: composer validate --no-check-lock
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Lint PHP syntax
+        # Shipped code only: tests/ is covered by the advisory test run, and
+        # some suites currently contain files that cannot be parsed.
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            if ! out=$(php -l "$file" 2>&1); then
+              echo "$out"
+              status=1
+            fi
+          done < <(find . -path ./vendor -prune -o -path ./build -prune \
+                        -o -path ./tests -prune -o -path ./node_modules -prune \
+                        -o -name '*.php' -print0)
+          exit $status
+
+      - name: Build production archive
+        # The build is what /bump ships, so a broken build must fail the PR.
+        run: composer build:production
+
+      # --- Advisory --------------------------------------------------------
+      # Reported but not yet enforced. Promote to a gate once a repo is green.
+
+      - name: PHPStan (advisory)
+        run: composer stan
+        continue-on-error: true
+
+      - name: PHPCS (advisory)
+        run: composer cs
+        continue-on-error: true
+
+      - name: PHPUnit (advisory)
+        run: composer test
+        continue-on-error: true
+
+      - name: composer.lock up to date (advisory)
+        run: composer validate
+        continue-on-error: true
