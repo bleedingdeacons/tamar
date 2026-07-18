@@ -537,7 +537,11 @@ class PluginBuilder
 
 
     /**
-     * Update the **Version:** line in README.md to match the current plugin version
+     * Update the version badge in README.md to match the current plugin version.
+     *
+     * The badge is the canonical place the version appears in README.md. The
+     * legacy **Version:** line is still rewritten where one exists, so a repo
+     * that has not been converted keeps working.
      */
     private function syncReadmeMarkdownVersion(): void
     {
@@ -554,18 +558,38 @@ class PluginBuilder
         }
 
         $updated = preg_replace(
-            '/^\*\*Version:\*\*\s*.+$/m',
-            '**Version:** ' . $this->version,
+            '~(img\.shields\.io/badge/version-)[^-\s)]+(-blue)~',
+            '${1}' . $this->version . '${2}',
             $content,
             -1,
-            $count
+            $badgeCount
         );
 
-        if ($count > 0 && $updated !== null) {
+        if ($updated === null) {
+            $this->error("Failed to rewrite the version badge in README.md");
+            return;
+        }
+
+        $updated = preg_replace(
+            '/^\*\*Version:\*\*\s*.+$/m',
+            '**Version:** ' . $this->version,
+            $updated,
+            -1,
+            $lineCount
+        );
+
+        if ($updated === null) {
+            $this->error("Failed to rewrite the **Version:** line in README.md");
+            return;
+        }
+
+        $count = $badgeCount + $lineCount;
+
+        if ($count > 0) {
             file_put_contents($readmeFile, $updated);
-            $this->log("Updated README.md version to {$this->version}");
+            $this->log("Updated README.md version to {$this->version} ({$badgeCount} badge, {$lineCount} line)");
         } else {
-            $this->log("No **Version:** line found in README.md — skipping version sync");
+            $this->log("No version badge or **Version:** line in README.md — skipping version sync");
         }
     }
 
