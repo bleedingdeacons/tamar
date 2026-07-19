@@ -379,14 +379,14 @@ final class SettingsPage
         echo '<option value="">' . esc_html__('— Select a hunt group —', 'tamar') . '</option>';
         $found = false;
         foreach ($groups as $group) {
-            $id = (string) ($group['id'] ?? '');
+            $id = (string) $group['id'];
             if ($id === '') {
                 continue;
             }
             $isSelected = $id === $current;
             $found = $found || $isSelected;
             echo '<option value="' . esc_attr($id) . '"' . selected($isSelected, true, false) . '>'
-                . esc_html((string) ($group['name'] ?? $id))
+                . esc_html((string) $group['name'])
                 . '</option>';
         }
         // A configured id that's no longer in the fetched list (renamed or
@@ -450,8 +450,8 @@ final class SettingsPage
     private function huntgroupName(array $groups, string $id): string
     {
         foreach ($groups as $group) {
-            if ((string) ($group['id'] ?? '') === $id) {
-                return (string) ($group['name'] ?? '');
+            if ((string) $group['id'] === $id) {
+                return (string) $group['name'];
             }
         }
         return '';
