@@ -103,7 +103,7 @@ jobs:
         # A gate, promoted from advisory now the repo is green. It ran
         # advisory for a long time, which hid that cross-plugin symbols were
         # unresolvable; the sibling checkouts above are what fixed that.
-        run: composer stan
+        run: composer phpstan
 
       - name: PHPUnit
         # A gate, promoted from advisory now the suite is green.
