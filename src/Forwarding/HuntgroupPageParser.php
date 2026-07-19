@@ -303,10 +303,8 @@ final class HuntgroupPageParser
                 ]);
                 continue;
             }
-            $row = $this->buildRule($xpath, $row, $ordinal, $position);
-            if ($row !== null) {
-                $out[] = $row;
-            }
+            // buildRule() is declared `: array` — it has no null return path.
+            $out[] = $this->buildRule($xpath, $row, $ordinal, $position);
         }
         return $out;
     }
