@@ -42,8 +42,8 @@
         "test:coverage": "phpunit --coverage-html ./tests/coverage",
         "cs": "phpcs --standard=WordPress ./src",
         "cs:fix": "phpcbf --standard=WordPress ./src",
-        "stan": "phpstan analyse -l 5 ./src",
-        "analyse": "phpstan analyse src/",
+        "stan": "phpstan analyse --memory-limit=1G",
+        "analyse": "phpstan analyse --memory-limit=1G src/",
         "check": [
             "@cs",
             "@stan",
