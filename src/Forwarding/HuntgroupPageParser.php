@@ -337,9 +337,9 @@ final class HuntgroupPageParser
     /**
      * Turn one huntdest row into Beacon's raw rule array.
      *
-     * @return array<string,mixed>|null
+     * @return array<string,mixed>
      */
-    private function buildRule(\DOMXPath $xpath, \DOMElement $row, int $ordinal, int $position): ?array
+    private function buildRule(\DOMXPath $xpath, \DOMElement $row, int $ordinal, int $position): array
     {
         $days = [];
         foreach (['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as $day) {

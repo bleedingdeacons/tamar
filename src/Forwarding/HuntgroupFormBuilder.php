@@ -65,8 +65,8 @@ final class HuntgroupFormBuilder
      */
     public function build(array $state): string
     {
-        $meta = $state['meta'] ?? [];
-        $rules = $state['rules'] ?? [];
+        $meta = $state['meta'];
+        $rules = $state['rules'];
 
         $pairs = [];
 
@@ -121,7 +121,7 @@ final class HuntgroupFormBuilder
      */
     public function applyRuleEdit(array $state, array $edited): array
     {
-        $rules = $state['rules'] ?? [];
+        $rules = $state['rules'];
         $editedId = (string) ($edited['id'] ?? '');
 
         if ($editedId === '') {
@@ -168,7 +168,7 @@ final class HuntgroupFormBuilder
      */
     public function applyRuleDelete(array $state, string $ruleId): array
     {
-        $rules = $state['rules'] ?? [];
+        $rules = $state['rules'];
         $kept = [];
         $removed = false;
         foreach ($rules as $rule) {

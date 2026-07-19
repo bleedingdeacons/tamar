@@ -15,9 +15,35 @@ jobs:
     name: PHP 8.1
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        # Tamar is checked out alongside Beacon and Sentinel, mirroring a
+        # WordPress plugins/ directory, so run everything from inside Tamar.
+        working-directory: tamar
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          path: tamar
+
+      - name: Checkout Beacon
+        # Tamar is a Beacon driver and implements its contracts.
+        # Scanned by phpstan.neon so cross-plugin symbols resolve.
+        uses: actions/checkout@v4
+        with:
+          repository: bleedingdeacons/beacon
+          ref: main
+          path: beacon
+
+      - name: Checkout Sentinel
+        # Provides Sentinel_Log_Channel, referenced in type positions by HasLogger.
+        # Scanned by phpstan.neon so cross-plugin symbols resolve.
+        uses: actions/checkout@v4
+        with:
+          repository: bleedingdeacons/sentinel
+          ref: main
+          path: sentinel
 
       - name: Setup PHP 8.1
         uses: shivammathur/setup-php@v2
@@ -73,19 +99,21 @@ jobs:
         # The build is what /bump ships, so a broken build must fail the PR.
         run: composer build:production
 
+      - name: PHPStan
+        # A gate, promoted from advisory now the repo is green. It ran
+        # advisory for a long time, which hid that cross-plugin symbols were
+        # unresolvable; the sibling checkouts above are what fixed that.
+        run: composer stan
+
+      - name: PHPUnit
+        # A gate, promoted from advisory now the suite is green.
+        run: composer test
+
       # --- Advisory --------------------------------------------------------
       # Reported but not yet enforced. Promote to a gate once a repo is green.
 
-      - name: PHPStan (advisory)
-        run: composer stan
-        continue-on-error: true
-
       - name: PHPCS (advisory)
         run: composer cs
-        continue-on-error: true
-
-      - name: PHPUnit (advisory)
-        run: composer test
         continue-on-error: true
 
       - name: composer.lock up to date (advisory)
