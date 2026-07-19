@@ -3,6 +3,13 @@ includes:
 
 parameters:
     level: 5
+    # PHPStan 2 proves a condition dead when PHPDoc says it cannot happen.
+    # In WordPress plugin code PHPDoc is aspirational: values arrive from
+    # get_field(), HTTP responses, scraped HTML and $_POST, none of which the
+    # annotation can guarantee. Trusting it would mean deleting defensive
+    # guards that are correct at runtime, so PHPDoc informs types but does not
+    # prove conditions. Native types are still checked normally.
+    treatPhpDocTypesAsCertain: false
     # An ignoreErrors pattern that stops matching is reported as an error by
     # default, so a stale pattern would fail the gate — and whether a pattern
     # matches depends on which sibling plugins are present, which differs
