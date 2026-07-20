@@ -621,7 +621,12 @@ class PluginBuilder
             return;
         }
 
-        $buildDate = date('Y/m/d H:i:s');
+        // Build timestamps reflect the build machine's wall clock, not UTC.
+        // php.ini sets date.timezone=UTC, so a bare date() call reads an hour
+        // behind during BST; the zone is stated explicitly here rather than
+        // left to ini config, which differs per machine.
+        $buildDate = (new DateTime('now', new DateTimeZone('Europe/London')))
+            ->format('Y/m/d H:i:s');
 
         // First, try to update an existing "Build date:" line.
         $updated = preg_replace(
