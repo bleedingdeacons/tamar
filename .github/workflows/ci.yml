@@ -126,15 +126,11 @@ jobs:
         # the paths inside the report to match the repository layout.
         uses: coverallsapp/github-action@v2
         continue-on-error: true
-        # Private repo: the coverage reporter reads the Coveralls repo token
-        # from the COVERALLS_REPO_TOKEN env var (the github-token input drives
-        # only the public GitHub-App flow). Secret comes from coveralls.io.
-        env:
-          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
         with:
           file: tamar/build/logs/clover.xml
           format: clover
           base-path: tamar
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: composer.lock up to date (advisory)
         run: composer validate
