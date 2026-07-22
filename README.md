@@ -113,6 +113,30 @@ The parser and builder tests run against `tests/Fixtures/huntgroup_157626.html`.
 - Beacon plugin (active)
 - OpenSSL extension (for password-at-rest; falls back to base64 with a warning if missing)
 
+## Testing
+
+Install the dev dependencies and run the suite from the plugin directory:
+
+```bash
+composer install
+```
+
+| Command | Description |
+|---|---|
+| `composer test` | Run the full PHPUnit test suite |
+| `composer test:unit` | Run unit tests only |
+| `composer test:integration` | Run integration tests only |
+| `composer test:coverage` | Generate an HTML coverage report |
+| `composer phpstan` | Run PHPStan static analysis |
+| `composer cs` | Check coding standards |
+| `composer cs:fix` | Auto-fix coding standard violations |
+| `composer check` | Run CS + PHPStan + tests in sequence |
+
+Line coverage is reported to [Coveralls](https://coveralls.io/github/bleedingdeacons/tamar?branch=main)
+on every CI run — see the coverage badge at the top of this file.
+
+---
+
 ## License
 
 GPL-2.0+
