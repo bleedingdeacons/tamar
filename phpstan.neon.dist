@@ -1,3 +1,8 @@
+# Committed PHPStan config.
+#
+# phpstan.neon (no .dist) is gitignored and, if present, overrides this
+# file entirely — keep personal tweaks there. This .dist is what CI uses.
+
 includes:
     - vendor/szepeviktor/phpstan-wordpress/extension.neon
 
