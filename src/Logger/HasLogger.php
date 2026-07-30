@@ -31,21 +31,25 @@ trait HasLogger
         return self::$loggerChannel;
     }
 
+    /** @param array<string, mixed> $context */
     public static function logError(string $message, array $context = []): void
     {
         static::log()?->error($message, $context);
     }
 
+    /** @param array<string, mixed> $context */
     public static function logWarning(string $message, array $context = []): void
     {
         static::log()?->warning($message, $context);
     }
 
+    /** @param array<string, mixed> $context */
     public static function logInfo(string $message, array $context = []): void
     {
         static::log()?->info($message, $context);
     }
 
+    /** @param array<string, mixed> $context */
     public static function logDebug(string $message, array $context = []): void
     {
         static::log()?->debug($message, $context);
