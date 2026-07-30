@@ -107,6 +107,25 @@ jobs:
         # unresolvable; the sibling checkouts above are what fixed that.
         run: composer phpstan
 
+      - name: PHPStan badge is resolvable
+        # The README badge is a shields.io dynamic badge: it reads
+        # parameters.level straight out of phpstan.neon.dist, parsed as YAML.
+        # NEON is not YAML — it only parses because this config sticks to
+        # YAML-compatible syntax. Add a NEON-specific construct (%placeholder%,
+        # entity::method, @service) and the badge quietly degrades to
+        # "no result", so assert here that the parse still yields a level.
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+          cfg = yaml.safe_load(open('phpstan.neon.dist')) or {}
+          level = cfg.get('parameters', {}).get('level')
+          if not isinstance(level, int):
+              sys.exit('phpstan.neon.dist no longer yields an integer '
+                       'parameters.level when parsed as YAML — the README '
+                       'badge would show "no result".')
+          print('badge resolves: level', level)
+          PY
+
       - name: PHPUnit
         # A gate, promoted from advisory now the suite is green.
         run: composer test -- --coverage-clover build/logs/clover.xml
