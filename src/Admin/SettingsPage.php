@@ -165,6 +165,9 @@ final class SettingsPage
         }
     }
 
+    /**
+     * @param array<string, mixed> $settings The tamar_settings option payload.
+     */
     private function renderSettingsForm(array $settings): void
     {
         $canEdit = current_user_can('beacon_manage_forwarding');

@@ -36,13 +36,6 @@ parameters:
         # paths (which is src only), so it has to be scanned explicitly.
         - tamar.php
     ignoreErrors:
-        # Level 6 is enforced except for its iterable-value rule, which is
-        # being adopted incrementally: what remains is all bare `array`
-        # needing `array<K, V>`. Everything else level 6 checks — missing
-        # parameter and return types — is gated now. Delete this entry once
-        # this plugin reports zero, so the level can never quietly slip back.
-        -
-            identifier: missingType.iterableValue
         # WordPress functions that PHPStan doesn't recognize
         - '#Function get_plugin_data not found#'
         - '#Function dbDelta not found#'
