@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tamar\Tests\Unit;
 
 use Beacon\Forwarding\Interfaces\ForwardingException;
-use PHPUnit\Framework\TestCase;
+use BleedingDeacons\WpMocks\TestCase;
 use Tamar\Forwarding\HuntgroupPageParser;
 
 /**

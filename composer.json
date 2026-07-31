@@ -9,11 +9,18 @@
         }
     ],
     "minimum-stability": "stable",
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/bleedingdeacons/wp-mocks"
+        }
+    ],
     "require": {
         "php": ">=8.1",
         "psr/container": "^2.0"
     },
     "require-dev": {
+        "bleedingdeacons/wp-mocks": "^1.0.3",
         "mockery/mockery": "^1.4",
         "phpstan/phpstan": "^2.0",
         "phpunit/phpunit": "^10.5",

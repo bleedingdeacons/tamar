@@ -7,7 +7,7 @@ namespace Tamar\Tests\Unit;
 use Beacon\Forwarding\Interfaces\ForwardingException;
 use Beacon\Forwarding\Models\ForwardingRule;
 use Beacon\Transport\Interfaces\HttpTransport;
-use PHPUnit\Framework\TestCase;
+use BleedingDeacons\WpMocks\TestCase;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
 use Tamar\Forwarding\HuntgroupFormBuilder;
 use Tamar\Forwarding\HuntgroupPageParser;

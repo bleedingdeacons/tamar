@@ -5,23 +5,32 @@ declare(strict_types=1);
 /**
  * Tamar PHPUnit bootstrap.
  *
- * Defines ABSPATH and a small set of WP function shims so Tamar's
- * source files (which guard against direct access and call a handful
- * of WP utilities) load under PHPUnit without a real WordPress.
+ * WordPress stand-ins come from bleedingdeacons/wp-mocks, shared across the
+ * plugin suite. Its bootstrap loads Patchwork before anything patchable, so
+ * anything below that defines WordPress functions of its own must stay after
+ * the Bootstrap::load() call, not before it.
  *
- * Real integration tests would use wp_mock / Brain Monkey; this
- * minimal shim is enough for the unit tests that exercise the
- * driver against a fake transport.
+ * Not loaded here: the `sentinel` stub group. Tamar\Logger\HasLogger is written
+ * to no-op when wp_log() is absent — the shared logger mu-plugin is Sentinel's,
+ * and Tamar does not depend on it — and that is the branch these tests run.
+ *
+ * Beyond the stubs this still loads the Beacon source Tamar builds on, which is
+ * a sibling plugin and so not reachable from Composer's autoloader here.
  */
+
+use BleedingDeacons\WpMocks\Bootstrap;
+use BleedingDeacons\WpMocks\WpState;
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+Bootstrap::load(['wordpress']);
+
+// Makes plugins_url()/plugin_dir_url() answer with Tamar's own path.
+WpState::$pluginSlug = 'tamar';
 
 if (!defined('ABSPATH')) {
     define('ABSPATH', __DIR__ . '/');
 }
-
-// PSR-11 stubs — Beacon's container uses them.
-require_once __DIR__ . '/../../beacon/tests/stubs/Psr/Container/ContainerExceptionInterface.php';
-require_once __DIR__ . '/../../beacon/tests/stubs/Psr/Container/NotFoundExceptionInterface.php';
-require_once __DIR__ . '/../../beacon/tests/stubs/Psr/Container/ContainerInterface.php';
 
 // Beacon source — Tamar depends on its interfaces and base class.
 // HasLogger must load first: AbstractCallForwardingService uses it, and
@@ -35,20 +44,3 @@ require_once $beaconSrc . '/Forwarding/AbstractCallForwardingService.php';
 require_once $beaconSrc . '/Targets/Models/ForwardingTarget.php';
 require_once $beaconSrc . '/Transport/Interfaces/HttpTransport.php';
 require_once $beaconSrc . '/Transport/Interfaces/TransportException.php';
-
-// Tamar source.
-require_once __DIR__ . '/../src/Forwarding/HtmlDocument.php';
-require_once __DIR__ . '/../src/Forwarding/HuntgroupPageParser.php';
-require_once __DIR__ . '/../src/Forwarding/HuntgroupFormBuilder.php';
-
-// The driver uses Tamar\Logger\HasLogger; we shim it for tests.
-if (!trait_exists('Tamar\\Logger\\HasLogger')) {
-    eval('namespace Tamar\\Logger; trait HasLogger {
-        public static function logError(string $m, array $c = []): void {}
-        public static function logWarning(string $m, array $c = []): void {}
-        public static function logInfo(string $m, array $c = []): void {}
-        public static function logDebug(string $m, array $c = []): void {}
-    }');
-}
-
-require_once __DIR__ . '/../src/Forwarding/HuntgroupCallForwardingService.php';

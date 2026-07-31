@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tamar\Tests\Unit;
 
-use PHPUnit\Framework\TestCase;
+use BleedingDeacons\WpMocks\TestCase;
 use Tamar\Forwarding\HuntgroupFormBuilder;
 use Tamar\Forwarding\HuntgroupPageParser;
 
