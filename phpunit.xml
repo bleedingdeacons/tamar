@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Schema is 10.5. Coverage include/exclude therefore lives in <source>,
+    not the 9.x <coverage> element.
+
+    This suite ran on PHPUnit 9.6 until wp_mock was dropped, not by choice:
+    10up/wp_mock 1.1.1 declares "phpunit/phpunit": "^9.6" in its own require
+    block and has no PHPUnit 10 branch, so asking for "^9.6|^10.0" alongside
+    it always resolved to 9.6. Tamar never used wp_mock at all — it was an
+    unused require-dev entry capping the whole suite.
+-->
 <phpunit
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
     bootstrap="tests/bootstrap.php"
     colors="true"
 >
@@ -10,9 +21,9 @@
         </testsuite>
     </testsuites>
 
-    <coverage>
+    <source>
         <include>
             <directory suffix=".php">src</directory>
         </include>
-    </coverage>
+    </source>
 </phpunit>
