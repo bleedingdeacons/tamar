@@ -1,0 +1,61 @@
+# Dependabot configuration.
+#
+# Two ecosystems, and they are worth very different amounts here.
+#
+# github-actions — the useful one. Every workflow in this suite pins
+# actions/checkout, shivammathur/setup-php, actions/cache and
+# coverallsapp/github-action to a major tag, and nothing else notices when one
+# of those goes stale or picks up a security fix.
+#
+# composer — deliberately limited, and it is worth knowing why before trusting
+# it. composer.lock is gitignored across all seventeen plugins, so CI resolves
+# dependencies from composer.json on every run. With no lock to update,
+# Dependabot can only widen or bump the *constraint* in composer.json, which
+# means it fires when a release lands outside the declared range (PHPUnit 11
+# against "^10.5") and stays silent when one lands inside it (PHPStan 2.2.8
+# against "^2.0"). The second case is the one that breaks a committed
+# phpstan-baseline.neon, and Dependabot cannot see it. Pinning tool versions in
+# CI is the answer to that, not this file.
+#
+# So: treat github-actions PRs as routine, and composer PRs as real changes
+# needing real review — a major bump of PHPUnit or PHPStan is not a rubber
+# stamp.
+#
+# Both are grouped and monthly on purpose. Seventeen repositories on a weekly
+# ungrouped schedule is a great deal of noise for a suite whose dependencies
+# already float.
+
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # One PR for all action bumps rather than one per action.
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(ci)"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # Everything here is require-dev; these plugins ship almost no production
+    # dependencies, and the ones they do ship are constrained deliberately.
+    groups:
+      dev-tooling:
+        dependency-type: "development"
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
