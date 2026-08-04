@@ -1,0 +1,58 @@
+# Dependabot configuration.
+#
+# Two ecosystems.
+#
+# github-actions — every workflow in this suite pins actions/checkout,
+# shivammathur/setup-php, actions/cache and coverallsapp/github-action to a
+# major tag, and nothing else notices when one goes stale or picks up a
+# security fix.
+#
+# composer — this is only worth having because composer.lock is *tracked*.
+# It was gitignored across the whole suite until this change, and that made
+# Dependabot nearly useless here: with no lock to update it can only bump the
+# constraint in composer.json, so it fires when a release lands outside the
+# declared range (PHPUnit 11 against "^10.5") and stays silent when one lands
+# inside it (PHPStan 2.2.8 against "^2.0"). The second case is the one that
+# breaks a committed phpstan-baseline.neon, and it was invisible.
+#
+# With the lock committed, a patch-level bump of the dev tooling is a real diff
+# in a real PR that CI runs against — which is the whole point.
+#
+# Both ecosystems are grouped and monthly on purpose. Seventeen repositories on
+# a weekly ungrouped schedule is a great deal of noise.
+
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # One PR for all action bumps rather than one per action.
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(ci)"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # Everything grouped into one PR: these plugins ship almost no production
+    # dependencies, and what moves is the dev tooling — phpunit, phpstan,
+    # mockery, wp-mocks — which is best reviewed and merged as a set, since CI
+    # runs them together anyway.
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"

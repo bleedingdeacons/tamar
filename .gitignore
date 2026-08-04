@@ -1,6 +1,5 @@
 # Composer
 /vendor/
-composer.lock
 
 # Build artifacts
 /build/
@@ -24,3 +23,11 @@ Thumbs.db
 
 # PHPStan
 /phpstan.neon
+
+# composer.lock is COMMITTED, deliberately - do not add it here.
+#
+# It was ignored across the whole suite until 2026-08-02. That made CI
+# resolve dependencies afresh on every run, so the tool versions a build
+# used were whatever had been published that morning, and Dependabot could
+# only see releases falling outside the composer.json constraints. A
+# PHPStan patch that broke the committed baseline was invisible to both.
