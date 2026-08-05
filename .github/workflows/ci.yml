@@ -23,14 +23,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: tamar
 
       - name: Checkout Beacon
         # Tamar is a Beacon driver and implements its contracts.
         # Scanned by phpstan.neon so cross-plugin symbols resolve.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: bleedingdeacons/beacon
           ref: main
@@ -39,7 +39,7 @@ jobs:
       - name: Checkout Sentinel
         # Provides Sentinel_Log_Channel, referenced in type positions by HasLogger.
         # Scanned by phpstan.neon so cross-plugin symbols resolve.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: bleedingdeacons/sentinel
           ref: main
@@ -61,7 +61,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           # Keyed on composer.json: composer.lock is untracked in several of
           # these repos, so it is not a reliable cache key across the suite.
