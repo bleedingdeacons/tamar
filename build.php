@@ -526,7 +526,7 @@ class PluginBuilder
         }
 
         $updated = preg_replace(
-            '/^Stable tag:\s*.+$/mi',
+            '/^Stable tag:[ \t]*[^\r\n]*(?=\r?$)/mi',
             'Stable tag: ' . $this->version,
             $content,
             -1,
@@ -577,7 +577,7 @@ class PluginBuilder
         }
 
         $updated = preg_replace(
-            '/^\*\*Version:\*\*\s*.+$/m',
+            '/^\*\*Version:\*\*[ \t]*[^\r\n]*(?=\r?$)/m',
             '**Version:** ' . $this->version,
             $updated,
             -1,
@@ -629,8 +629,13 @@ class PluginBuilder
             ->format('Y/m/d H:i:s');
 
         // First, try to update an existing "Build date:" line.
+        // The tail is matched as [^\r\n]* with a lookahead, not .+$. In PCRE `.`
+        // matches \r, so `.+$` swallows the carriage return of a CRLF line and the
+        // replacement writes it back LF-only, leaving one mixed line ending behind.
+        // `$` in multiline mode anchors before \n and not before \r, so the CR has
+        // to be stepped over by a lookahead rather than matched, or nothing matches.
         $updated = preg_replace(
-            '/^Build date:[ \t]*.+$/mi',
+            '/^Build date:[ \t]*[^\r\n]*(?=\r?$)/mi',
             'Build date: ' . $buildDate,
             $content,
             1,
@@ -646,7 +651,7 @@ class PluginBuilder
         // No existing line — insert one right after the "Stable tag:" line,
         // preserving the file's line ending convention (\r\n or \n).
         $updated = preg_replace_callback(
-            '/^(Stable tag:[ \t]*.+)(\r?\n)/mi',
+            '/^(Stable tag:[ \t]*[^\r\n]*)(\r?\n)/mi',
             static function (array $m) use ($buildDate): string {
                 return $m[1] . $m[2] . 'Build date: ' . $buildDate . $m[2];
             },
