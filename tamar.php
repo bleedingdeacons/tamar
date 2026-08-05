@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 /**
  * Plugin Name: Tamar
  * Description: Beacon driver for Tamar Telecommunications' control panel. Implements Beacon's CallForwardingService contract by reading and writing the hunt-group editor at /phonedivert/huntgroup. Requires the Beacon plugin to be installed and active.
@@ -17,6 +15,8 @@ declare(strict_types=1);
  * License: MIT (Modified)
  * Text Domain: tamar
  */
+
+declare(strict_types=1);
 
 if (!defined('ABSPATH')) {
     exit;
@@ -83,7 +83,6 @@ add_action('beacon/loaded', function ($container) {
          * @param \Psr\Container\ContainerInterface $container The shared dependency container
          */
         do_action('tamar/loaded', \Tamar\Plugin::getContainer());
-
     } catch (\Exception $e) {
         function_exists('wp_log')
             ? wp_log('tamar')->error('Tamar Plugin Initialisation Error: ' . $e->getMessage(), ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()])
