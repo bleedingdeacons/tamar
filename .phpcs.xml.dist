@@ -4,6 +4,9 @@
 
     <file>src</file>
     <file>tests</file>
+    <file>tamar.php</file>
+    <file>build.php</file>
+    <file>uninstall.php</file>
 
     <arg name="basepath" value="."/>
     <arg name="extensions" value="php"/>
@@ -33,6 +36,9 @@
          PascalCase, and deliberately grouped in the file that uses them. -->
     <rule ref="PSR1.Classes.ClassDeclaration">
         <exclude-pattern>tests/*</exclude-pattern>
+        <!-- build.php is a standalone CLI build script, never autoloaded and never
+             shipped; its PluginBuilder class is deliberately global. -->
+        <exclude-pattern>build\.php</exclude-pattern>
     </rule>
     <rule ref="Squiz.Classes.ValidClassName">
         <exclude-pattern>tests/*</exclude-pattern>
