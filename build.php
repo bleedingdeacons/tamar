@@ -92,7 +92,7 @@ class PluginBuilder
         // tooling (phpunit, phpstan, mockery, …). Production excludes it
         // wholesale and ships a freshly staged --no-dev vendor/ instead
         // (see stageProductionVendor()).
-            'vendor',
+            'vendor',
 
             // Dev artefacts that must never ship
             '.phpunit.result.cache',
