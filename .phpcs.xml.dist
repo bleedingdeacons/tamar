@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<ruleset name="tamar">
+    <description>PSR-12 coding standard for the Tamar plugin.</description>
+
+    <file>src</file>
+    <file>tests</file>
+
+    <arg name="basepath" value="."/>
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+
+    <rule ref="PSR12"/>
+</ruleset>

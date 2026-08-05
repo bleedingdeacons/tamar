@@ -134,7 +134,7 @@ jobs:
       # Reported but not yet enforced. Promote to a gate once a repo is green.
 
       - name: PHPCS (advisory)
-        run: composer cs
+        run: composer phpcs
         continue-on-error: true
 
       - name: Upload coverage to Coveralls (advisory)
