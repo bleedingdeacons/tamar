@@ -130,12 +130,35 @@ jobs:
         # A gate, promoted from advisory now the suite is green.
         run: composer test -- --coverage-clover build/logs/clover.xml
 
-      # --- Advisory --------------------------------------------------------
-      # Reported but not yet enforced. Promote to a gate once a repo is green.
-
-      - name: PHPCS (advisory)
+      - name: PHPCS
+        # A gate. .phpcs.xml.dist is PSR-12 with a handful of documented
+        # exclusions for things WordPress forces on us (the ABSPATH guard reads
+        # as a PSR-1 side effect) and for test-only idioms (snake_case BDD
+        # method names, WP_* stubs that must stay global and non-PascalCase).
         run: composer phpcs
-        continue-on-error: true
+
+      - name: PHPCS badge is resolvable
+        # The README badge is a shields.io dynamic badge: it reads the first
+        # top-level <rule ref> straight out of .phpcs.xml.dist via the XPath
+        # /ruleset/rule[1]/@ref, so the badge always states the standard this
+        # repo actually enforces. Reorder the ruleset so a different rule comes
+        # first and the badge silently starts advertising that instead, so
+        # assert here that the query still yields the base standard.
+        run: |
+          python3 - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse('.phpcs.xml.dist').getroot()
+          rules = root.findall('rule')
+          ref = rules[0].get('ref') if rules else None
+          if ref != 'PSR12':
+              sys.exit('The first top-level <rule> in .phpcs.xml.dist is '
+                       f'{ref!r}, not "PSR12" — the README badge would '
+                       'advertise the wrong standard.')
+          print('badge resolves:', ref)
+          PY
+
+      # --- Advisory --------------------------------------------------------
+      # Reported but not enforced.
 
       - name: Upload coverage to Coveralls (advisory)
         # Reports a coverage number; does not gate the build. The Clover report
