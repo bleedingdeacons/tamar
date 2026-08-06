@@ -74,10 +74,14 @@ jobs:
       # These fail the build. Each is verified to pass in this repo today.
 
       - name: Validate composer.json
-        # --no-check-lock: composer.lock is untracked in some repos and drifted
-        # from composer.json in others. Lock state is reported as advisory
-        # rather than blocking every PR in the suite.
-        run: composer validate --no-check-lock
+        # A gate, lock included. This ran with --no-check-lock on the reasoning
+        # that composer.lock was untracked in some repos and had drifted from
+        # composer.json in others, with lock state reported as a separate
+        # advisory step instead. Neither is true any more: every repo tracks its
+        # lock and every lock is in sync, verified on the runner rather than
+        # locally. So the advisory step has gone and this checks the lock
+        # directly.
+        run: composer validate
 
       - name: Composer audit
         # A gate. --locked reads composer.lock directly, so this needs no
@@ -193,7 +197,3 @@ jobs:
           format: clover
           base-path: tamar
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: composer.lock up to date (advisory)
-        run: composer validate
-        continue-on-error: true
