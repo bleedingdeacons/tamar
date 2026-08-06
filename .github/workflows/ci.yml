@@ -79,6 +79,26 @@ jobs:
         # rather than blocking every PR in the suite.
         run: composer validate --no-check-lock
 
+      - name: Composer audit
+        # A gate. --locked reads composer.lock directly, so this needs no
+        # vendor/ and runs before install, failing in seconds. Nothing is added
+        # to require-dev — Composer ships the command.
+        #
+        # Dev dependencies are audited too. Scoping this to --no-dev was tried
+        # first, so that an advisory against a dev tool could not block every PR
+        # in the suite. It does not work here: production requirements across
+        # these plugins amount to psr/container and a couple of ext-*, so the
+        # audit set is empty in 9 of the 17 and Composer 2.10 treats an empty
+        # set as an error ("No installed packages found") even with --locked.
+        # Composer 2.9 skips it and exits 0, which is why that only showed up in
+        # CI. Where it did run it audited a single package. Auditing the whole
+        # lock audits something real.
+        #
+        # --abandoned=report pins today's behaviour. The default becomes "fail"
+        # in Composer 3, which would turn an unmaintained package into a build
+        # failure without anyone having chosen that.
+        run: composer audit --locked --abandoned=report
+
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
 
