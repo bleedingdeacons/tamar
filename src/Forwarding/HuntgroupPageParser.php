@@ -135,8 +135,8 @@ final class HuntgroupPageParser
         // and the huntingconfig table. A login redirect or error page
         // won't — throw fast rather than reporting "no rules", which
         // an operator could misread as "the rota is empty".
-        $form = $xpath->query("//form[@id='auto-form']")->item(0);
-        $table = $xpath->query("//table[@id='huntingconfig']")->item(0);
+        $form = self::firstNode($xpath, "//form[@id='auto-form']");
+        $table = self::firstNode($xpath, "//table[@id='huntingconfig']");
         if (!$form instanceof \DOMElement || !$table instanceof \DOMElement) {
             self::logError('Hunt-group page missing expected edit form/table', [
                 'has_form' => $form instanceof \DOMElement,
@@ -185,7 +185,7 @@ final class HuntgroupPageParser
         }
 
         $xpath = new \DOMXPath($this->loadDocument($html));
-        return $xpath->query("//form[@id='auto-form']")->item(0) instanceof \DOMElement;
+        return self::firstNode($xpath, "//form[@id='auto-form']") instanceof \DOMElement;
     }
 
     /**
@@ -217,7 +217,7 @@ final class HuntgroupPageParser
         }
 
         $xpath = new \DOMXPath($this->loadDocument($html));
-        $select = $xpath->query("//select[@name='huntgroup']")->item(0);
+        $select = self::firstNode($xpath, "//select[@name='huntgroup']");
         if (!$select instanceof \DOMElement) {
             self::logError('Hunt-group list page missing the expected huntgroup select');
             throw new ForwardingException(
@@ -475,26 +475,45 @@ final class HuntgroupPageParser
 
     // -- DOM helpers ------------------------------------------------------
 
+    /**
+     * First node matching $expression, or null if there is none.
+     *
+     * DOMXPath::query() returns false for a malformed expression, and several
+     * of the expressions below interpolate a field name, so that is reachable
+     * rather than merely theoretical — a name carrying a quote would break the
+     * predicate. Collapsing the union here means the callers keep reading as
+     * "find this node or don't", instead of carrying a false check each.
+     */
+    private static function firstNode(
+        \DOMXPath $xpath,
+        string $expression,
+        ?\DOMNode $context = null
+    ): \DOMNode|\DOMNameSpaceNode|null {
+        $nodes = $xpath->query($expression, $context);
+
+        return $nodes === false ? null : $nodes->item(0);
+    }
+
     private function inputValue(\DOMXPath $xpath, \DOMElement $form, string $name): string
     {
-        $node = $xpath->query(".//input[@name='" . $name . "']", $form)->item(0);
+        $node = self::firstNode($xpath, ".//input[@name='" . $name . "']", $form);
         return $node instanceof \DOMElement ? $node->getAttribute('value') : '';
     }
 
     private function selectedValue(\DOMXPath $xpath, \DOMElement $form, string $name): string
     {
-        $select = $xpath->query(".//select[@name='" . $name . "']", $form)->item(0);
+        $select = self::firstNode($xpath, ".//select[@name='" . $name . "']", $form);
         if (!$select instanceof \DOMElement) {
             return '';
         }
-        $selected = $xpath->query(".//option[@selected]", $select)->item(0);
+        $selected = self::firstNode($xpath, ".//option[@selected]", $select);
         if ($selected instanceof \DOMElement) {
             return $selected->getAttribute('value');
         }
         // No explicit `selected` attr — browsers fall back to the first
         // option. Mirror that to avoid `''` when the upstream renders a
         // pre-selected first item without the attribute.
-        $first = $xpath->query(".//option", $select)->item(0);
+        $first = self::firstNode($xpath, ".//option", $select);
         return $first instanceof \DOMElement ? $first->getAttribute('value') : '';
     }
 
@@ -503,7 +522,7 @@ final class HuntgroupPageParser
      */
     private function selectOptions(\DOMXPath $xpath, \DOMElement $form, string $name): array
     {
-        $select = $xpath->query(".//select[@name='" . $name . "']", $form)->item(0);
+        $select = self::firstNode($xpath, ".//select[@name='" . $name . "']", $form);
         if (!$select instanceof \DOMElement) {
             return [];
         }
@@ -526,7 +545,7 @@ final class HuntgroupPageParser
 
     private function rowValue(\DOMXPath $xpath, \DOMElement $row, string $name): string
     {
-        $node = $xpath->query(".//input[@name='" . $name . "']", $row)->item(0);
+        $node = self::firstNode($xpath, ".//input[@name='" . $name . "']", $row);
         return $node instanceof \DOMElement ? $node->getAttribute('value') : '';
     }
 
@@ -537,7 +556,7 @@ final class HuntgroupPageParser
      */
     private function rowChecked(\DOMXPath $xpath, \DOMElement $row, string $name): bool
     {
-        $node = $xpath->query(".//input[@name='" . $name . "' and @type='checkbox']", $row)->item(0);
+        $node = self::firstNode($xpath, ".//input[@name='" . $name . "' and @type='checkbox']", $row);
         return $node instanceof \DOMElement && $node->hasAttribute('checked');
     }
 

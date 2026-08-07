@@ -9,6 +9,7 @@ if (!defined('ABSPATH')) {
 }
 
 use Beacon\Forwarding\Models\ForwardingRule;
+use Beacon\Targets\Models\ForwardingTarget;
 
 /**
  * Read-only "current forwarding setup" view.
@@ -35,8 +36,12 @@ use Beacon\Forwarding\Models\ForwardingRule;
 final class ForwardingOverview
 {
     /**
-     * @param ForwardingRule[] $rules   From CallForwardingService::listRules()
-     * @param object[]         $targets From CallForwardingService::listTargets()
+     * @param ForwardingRule[]   $rules   From CallForwardingService::listRules()
+     * @param ForwardingTarget[] $targets From CallForwardingService::listTargets()
+     *                                    — which is what the contract has always
+     *                                    returned. The previous `object[]` said
+     *                                    nothing, so every getter call below was
+     *                                    a call on a shapeless object.
      */
     public function render(array $rules, array $targets): void
     {
@@ -102,7 +107,7 @@ final class ForwardingOverview
         echo '</div>';
     }
 
-    private function renderStep(int $step, ForwardingRule $rule, ?object $target): void
+    private function renderStep(int $step, ForwardingRule $rule, ?ForwardingTarget $target): void
     {
         $enabled = $rule->isEnabled();
         $classes = 'tamar-step' . ($enabled ? '' : ' tamar-step--off');
@@ -132,7 +137,7 @@ final class ForwardingOverview
         echo '</div></li>';
     }
 
-    private function renderFallThrough(object $voicemail): void
+    private function renderFallThrough(ForwardingTarget $voicemail): void
     {
         $label = $voicemail->getLabel() !== '' ? $voicemail->getLabel() : $voicemail->getId();
         echo '<li class="tamar-step tamar-step--tail">';
@@ -148,7 +153,7 @@ final class ForwardingOverview
      * Render a rule's destination. Resolves the target where possible;
      * falls back to the raw target id so nothing is silently dropped.
      */
-    private function describeTarget(string $targetId, ?object $target): string
+    private function describeTarget(string $targetId, ?ForwardingTarget $target): string
     {
         if ($target === null) {
             return '<span class="tamar-target tamar-target--unknown"><code>'
@@ -228,7 +233,7 @@ final class ForwardingOverview
         return implode(', ', array_map(static fn(string $d): string => $labels[$d], $set));
     }
 
-    /** @param object[] $targets */
+    /** @param ForwardingTarget[] $targets */
     private function renderTargets(array $targets): void
     {
         echo '<h2 class="tamar-overview__targets-head">' . esc_html__('Known targets', 'tamar') . '</h2>';
