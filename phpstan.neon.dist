@@ -7,7 +7,7 @@ includes:
     - vendor/szepeviktor/phpstan-wordpress/extension.neon
 
 parameters:
-    level: 6
+    level: 7
     # PHPStan 2 proves a condition dead when PHPDoc says it cannot happen.
     # In WordPress plugin code PHPDoc is aspirational: values arrive from
     # get_field(), HTTP responses, scraped HTML and $_POST, none of which the
