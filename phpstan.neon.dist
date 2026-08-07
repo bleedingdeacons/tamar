@@ -41,8 +41,7 @@ parameters:
         # paths (which is src only), so it has to be scanned explicitly.
         - tamar.php
     ignoreErrors:
-        # WordPress functions that PHPStan doesn't recognize
-        - '#Function get_plugin_data not found#'
-        - '#Function dbDelta not found#'
+        # The get_plugin_data and dbDelta entries were removed from here once
+        # wordpress-stubs resolved them and they stopped matching.
         # A wp-config.php salt. Defined by the site, never by the plugin.
         - '#Constant AUTH_KEY not found#'
