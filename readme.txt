@@ -3,8 +3,8 @@ Contributors: thebleedingdeacons
 Tags: call-forwarding, telephony, pbx, beacon, tamar-telecommunications
 Requires at least: 6.1
 Tested up to: 6.9
-Stable tag: 1.5.7
-Build date: 2026/08/08 05:05:29
+Stable tag: 1.5.8
+Build date: 2026/08/09 20:43:56
 Requires PHP: 8.1
 License: MIT (Modified — No Resale)
 
