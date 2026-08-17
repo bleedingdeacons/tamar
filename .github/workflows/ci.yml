@@ -315,6 +315,49 @@ jobs:
           tags = git('tag', '--list', 'v[0-9]*', '--sort=-v:refname').split()
           last = tags[0] if tags else ''
 
+          # The header is read before anything is decided, because which of
+          # three states this run is in depends on it.
+          with open(MAIN, encoding='utf-8', newline='') as fh:
+              header_src = fh.read()
+          hm = re.search(r'(?m)^(?P<pre>\s*\*\s*Version:\s*)'
+                         r'(?P<ver>[0-9]+(?:\.[0-9]+)*)(?P<post>.*)$', header_src)
+          if not hm:
+              sys.exit(f'No "Version:" header line in {MAIN}.')
+          header = hm.group('ver')
+
+          # State 1 - the header carries a version that was never tagged.
+          #
+          # A previous run raised it, committed and pushed, and then died
+          # before the release was published. That is not hypothetical: on
+          # 2026-08-17 a GitHub outage failed `gh release create` with a 503
+          # in six plugins at once, after the version commit had landed. The
+          # job could not then recover, because raising the version again
+          # found nothing to commit and the step exited 1 - so the fix sat on
+          # main, unreleased, and every re-run and workflow_dispatch failed
+          # the same way.
+          #
+          # Publish what is already committed rather than inventing a new
+          # version. This is what makes the job re-runnable.
+          if f'v{header}' not in set(tags):
+              print('action=publish', f'version={header}', f'previous={header}',
+                    'level=none',
+                    'why=version already committed but never released; publishing it',
+                    sep='\n')
+              print(f'{MAIN}: recovering unreleased v{header}', file=sys.stderr)
+              sys.exit(0)
+
+          # State 2 - nothing new since the last release. Skip, successfully.
+          #
+          # Re-running a green release used to cut an empty version whose diff
+          # was only the version strings. A run with nothing to do should say
+          # so and pass, not manufacture a release.
+          if last and not [s for s in git('log', f'{last}..HEAD', '--format=%s').splitlines() if s]:
+              print('action=skip', f'version={header}', f'previous={header}',
+                    'level=none', f'why=no commits since {last}', sep='\n')
+              print(f'{MAIN}: nothing to release since {last}', file=sys.stderr)
+              sys.exit(0)
+
+          # State 3 - the ordinary case: raise the version for what has landed.
           if not last:
               level = 'patch'
               why = 'no previous release tag; first release is always a patch'
@@ -361,23 +404,26 @@ jobs:
           with open(MAIN, 'w', encoding='utf-8', newline='') as fh:
               fh.write(src)
 
-          print(f'level={level}', f'version={new}', f'previous={cur}',
-                f'why={why}', sep='\n')
+          print('action=bump', f'level={level}', f'version={new}',
+                f'previous={cur}', f'why={why}', sep='\n')
           print(f'{MAIN}: {cur} -> {new} ({level} — {why})', file=sys.stderr)
           PY
 
       - name: Install dependencies
+        if: steps.version.outputs.action != 'skip'
         # --no-dev: nothing here runs the test suite or the linters, and
         # build.php stages its own no-dev vendor/ for the archive regardless.
         run: composer install --no-dev --prefer-dist --no-progress
 
       - name: Build production archive
+        if: steps.version.outputs.action != 'skip'
         # This is the shipping zip. build.php is also the only thing that
         # propagates the version raised above into readme.txt, README.md and the
         # bundled docs, so those writes are what the commit below picks up.
         run: composer build:production
 
       - name: Check the archive was produced
+        if: steps.version.outputs.action != 'skip'
         # Named explicitly rather than left to `gh release create` to fail on a
         # missing file, so a rename in build.php reads as a rename and not as a
         # GitHub API error.
@@ -392,6 +438,7 @@ jobs:
 
       - name: Commit the version bump
         id: commit
+        if: steps.version.outputs.action != 'skip'
         # Straight to main, not via a PR. This is the commit that used to need
         # its own — it contains nothing a human wrote and nothing to review:
         # a version header, and whatever build.php propagated it into.
@@ -404,8 +451,13 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
           if git diff --cached --quiet; then
-            echo 'Nothing to commit — the version header was already current.'
-            exit 1
+            # Not a failure. In recovery mode the version header is already
+            # correct and already pushed - there is genuinely nothing to
+            # commit, and the release still needs publishing against the
+            # commit that carries it.
+            echo 'Nothing to commit - the version header is already current.'
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           git commit -m 'chore(release): v${{ steps.version.outputs.version }} [skip ci]'
           # A merge that landed while this job was building would make the push
@@ -415,6 +467,7 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Publish the GitHub Release
+        if: steps.version.outputs.action != 'skip'
         # --target pins the tag to the commit just pushed rather than to
         # whatever main points at by now. The zip is the only asset; the notes
         # are generated from the PRs since the last tag.
@@ -422,6 +475,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION is already published; nothing to do."
+            exit 0
+          fi
           gh release create "v$VERSION" \
             "build/tamar-production-$VERSION.zip" \
             --title "v$VERSION" \
