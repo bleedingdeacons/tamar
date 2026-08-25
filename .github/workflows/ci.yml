@@ -35,14 +35,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: tamar
 
       - name: Checkout Beacon
         # Tamar is a Beacon driver and implements its contracts.
         # Scanned by phpstan.neon so cross-plugin symbols resolve.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bleedingdeacons/beacon
           ref: main
@@ -51,14 +51,14 @@ jobs:
       - name: Checkout Sentinel
         # Provides Sentinel_Log_Channel, referenced in type positions by HasLogger.
         # Scanned by phpstan.neon so cross-plugin symbols resolve.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bleedingdeacons/sentinel
           ref: main
           path: sentinel
 
       - name: Setup PHP 8.1
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.1'
           # zip: build.php assembles the release archive with ZipArchive.
@@ -73,7 +73,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer dependencies
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Keyed on composer.json: composer.lock is untracked in several of
           # these repos, so it is not a reliable cache key across the suite.
@@ -114,6 +114,50 @@ jobs:
         # in Composer 3, which would turn an unmaintained package into a build
         # failure without anyone having chosen that.
         run: composer audit --locked --abandoned=report
+
+      - name: Semgrep
+        # A gate, on pull requests and on main alike.
+        #
+        # `semgrep ci` is diff-aware on a PR: it scans against the merge base
+        # and reports only what that PR introduces — the same bargain PHPStan's
+        # baseline strikes below, with the platform holding the existing state
+        # instead of a committed file. On main it runs a full scan, and that
+        # gates the release: release has `needs: ci`, so a blocking finding
+        # means no version is raised and no zip is published.
+        #
+        # Deliberately no continue-on-error. Making the main scan advisory was
+        # tried first, reasoning that a merge is the release here and a
+        # pre-existing finding should not be able to freeze one. That has the
+        # trade backwards: it buys an uninterrupted release cadence by shipping
+        # a zip the scanner has already objected to. If a finding does block a
+        # release, triage it and re-cut with workflow_dispatch, which runs the
+        # gates and publishes exactly as a merge does.
+        #
+        # A run: step rather than semgrep/semgrep-action, for two reasons.
+        # uses: steps ignore defaults.run.working-directory (see the Coveralls
+        # step below), and these jobs check this repo out alongside its
+        # siblings — an action would scan all of them and file the siblings'
+        # findings against this repo, where they would never dedupe against
+        # those repos' own scans and a merge into one of them could fail an
+        # unrelated PR here. Running from inside this repo's own directory
+        # scopes the scan to this git repo. Pinning a third-party action to run
+        # the security scanning is also the trivy-action shape; installing a
+        # pinned semgrep adds no action.
+        #
+        # Some of this suite's findings come from pro rules, which only exist
+        # with a platform token. Without SEMGREP_APP_TOKEN this skips outright
+        # rather than scanning with a quietly smaller ruleset and reporting
+        # green.
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: |
+          if [ -z "${SEMGREP_APP_TOKEN:-}" ]; then
+            echo 'SEMGREP_APP_TOKEN is not set - skipping the scan.'
+            echo 'Set it as an organisation secret to enable this gate.'
+            exit 0
+          fi
+          python3 -m pip install --quiet semgrep==1.174.0
+          semgrep ci
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
@@ -202,7 +246,7 @@ jobs:
         # root (defaults.run.working-directory does not apply to `uses:` steps),
         # so the file is under tamar/ and base-path strips that prefix back off
         # the paths inside the report to match the repository layout.
-        uses: coverallsapp/github-action@v2
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
         continue-on-error: true
         with:
           file: tamar/build/logs/clover.xml
@@ -259,28 +303,28 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history and tags: see the version step below.
           fetch-depth: 0
           path: tamar
 
       - name: Checkout Beacon
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bleedingdeacons/beacon
           ref: main
           path: beacon
 
       - name: Checkout Sentinel
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bleedingdeacons/sentinel
           ref: main
           path: sentinel
 
       - name: Setup PHP 8.1
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.1'
           # zip: build.php assembles the release archive with ZipArchive.
