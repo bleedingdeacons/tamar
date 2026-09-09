@@ -12,6 +12,7 @@ use Psr\Container\ContainerInterface;
 use Beacon\Forwarding\Interfaces\CallForwardingService;
 use Beacon\Transport\Interfaces\HttpTransport;
 use Beacon\Transport\Interfaces\HttpTransportFactory;
+use Beacon\Transport\UserAgent;
 use Beacon\Transport\WpHttpTransportFactory;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
 use Tamar\Forwarding\HuntgroupFormBuilder;
@@ -63,6 +64,12 @@ final class TamarServiceProvider
             return new WpHttpTransportFactory(
                 verifyTls: $settings['verify_tls'],
                 timeoutSeconds: $settings['timeout'],
+                // Tamar owns this conversation, so the panel sees Tamar
+                // rather than the Beacon framework underneath it. A
+                // user-agent naming the plugin, its version and a contact
+                // address is what keeps the panel's bot protection from
+                // challenging the request.
+                userAgent: UserAgent::forApp('Tamar', defined('TAMAR_VERSION') ? TAMAR_VERSION : ''),
                 // Attribute the generic Beacon transport's HTTP logging
                 // to Tamar's own channel, so a log line names the plugin
                 // the traffic belongs to rather than the transport class.
