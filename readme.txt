@@ -2,10 +2,10 @@
 Contributors: thebleedingdeacons
 Tags: call-forwarding, telephony, pbx, beacon, tamar-telecommunications
 Requires at least: 6.1
-Tested up to: 6.9
+Tested up to: 7.1.1
 Stable tag: 1.5.15
 Build date: 2026/09/09 20:07:49
-Requires PHP: 8.1
+Requires PHP: 8.4
 License: MIT (Modified — No Resale)
 
 Beacon driver for Tamar Telecommunications' control panel. Reads and writes the hunt-group editor at /phonedivert/huntgroup.

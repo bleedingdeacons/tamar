@@ -8,6 +8,15 @@ includes:
 
 parameters:
     level: 8
+    # Analyse across the supported range — 8.4 is the floor, 8.5 the
+    # ceiling CI also runs. A single pin proves one end only: at the
+    # ceiling it misses an 8.5-only construct that breaks on 8.4, at the
+    # floor it misses what 8.5 deprecates. Without it PHPStan analyses
+    # using whatever PHP runs it, so a developer and CI disagree and the
+    # committed baseline stops matching.
+    phpVersion:
+        min: 80400
+        max: 80500
     # PHPStan 2 proves a condition dead when PHPDoc says it cannot happen.
     # In WordPress plugin code PHPDoc is aspirational: values arrive from
     # get_field(), HTTP responses, scraped HTML and $_POST, none of which the

@@ -5,7 +5,7 @@
  * Description: Beacon driver for Tamar Telecommunications' control panel. Implements Beacon's CallForwardingService contract by reading and writing the hunt-group editor at /phonedivert/huntgroup. Requires the Beacon plugin to be installed and active.
  * Version: 1.5.15
  * Requires at least: 6.1
- * Requires PHP: 8.1
+ * Requires PHP: 8.4
  * Requires Plugins: beacon
  * GitHub Plugin URI: https://github.com/bleedingdeacons/tamar
  * GitHub Branch: main
