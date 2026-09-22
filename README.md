@@ -1,4 +1,4 @@
-# Tamar — Tamar Telecommunications Driver for Beacon
+# Tamar — Call Forwarding for Tamar Telecommunications
 
 [![CI](https://github.com/bleedingdeacons/tamar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bleedingdeacons/tamar/actions/workflows/ci.yml)
 [![Semgrep](https://github.com/bleedingdeacons/tamar/actions/workflows/semgrep.yml/badge.svg?branch=main)](https://github.com/bleedingdeacons/tamar/actions/workflows/semgrep.yml)
@@ -9,19 +9,19 @@
 ![PHP](https://img.shields.io/badge/php-8.1%2B-777bb4)
 ![Licence](https://img.shields.io/badge/licence-MIT%20(Modified)-green)
 
-Tamar is the implementation half of the Beacon call-forwarding stack. It targets one specific upstream — **Tamar Telecommunications' control panel** (`www.tamartelecommunications.co.uk/phonedivert/...`) — and implements Beacon's `CallForwardingService` contract by reading and writing the hunt-group editor.
+Tamar is the call-forwarding plugin. It is built on the **Beacon library** (a Composer dependency, not a plugin) and targets one specific upstream — **Tamar Telecommunications' control panel** (`www.tamartelecommunications.co.uk/phonedivert/...`) — implementing Beacon's `CallForwardingService` contract by reading and writing the hunt-group editor.
 
 ## Architecture
 
 ```
-plugins_loaded ──▶ Beacon ──fires──▶ beacon/loaded ──▶ Tamar
-                   (contracts)                        (binds driver)
+Tamar (plugins_loaded) ──bind──▶ Beacon\Forwarding\ForwardingRegistry ◀──get── Trusted
 ```
 
-- **Beacon** defines `CallForwardingService` and ships no driver.
-- **Tamar** hooks `beacon/loaded` and binds a concrete `HuntgroupCallForwardingService` into Beacon's container. Other code calling `beacon()->get(CallForwardingService::class)` then gets a real, working forwarding service.
+- **Beacon** is a library Tamar requires through Composer. It defines `CallForwardingService`, the models, the HTTP transport, the forwarding roles and the REST controller.
+- **Tamar** wires a `HuntgroupCallForwardingService` into its own container on `plugins_loaded` and publishes it with `ForwardingRegistry::bind()`. Trusted calls `ForwardingRegistry::get()` when it needs a driver.
+- **Tamar owns what the Beacon plugin used to**: it registers the `beacon_*` roles on activation, removes them on deactivation and uninstall, re-registers them if they go missing, and registers the `beacon/v1` REST routes when `BEACON_ENABLE_REST` is defined in `wp-config.php`.
 
-Tamar never touches Beacon's namespace internals — it depends on the public interface, the abstract base class, and Beacon's container hook. Swapping Tamar for a different driver (a SIP API client, a vendor SDK wrapper) is just a question of registering a different binding on `beacon/loaded`.
+Until Beacon v3.0.0, Beacon was a plugin that had to be active alongside Tamar, and Tamar bound its driver on the `beacon/loaded` action.
 
 ## How the integration works
 
@@ -84,7 +84,7 @@ The top-level **Tamar** menu in the WordPress admin (**Tamar → Settings**):
 
 ```
 tamar/
-├── tamar.php                  Bootstrap (hooks beacon/loaded)
+├── tamar.php                  Bootstrap, roles, kill switch
 ├── uninstall.php
 ├── composer.json
 ├── src/
@@ -96,7 +96,7 @@ tamar/
 │   ├── Forwarding/
 │   │   ├── HuntgroupPageParser.php          DOM+XPath parse of the editor page
 │   │   ├── HuntgroupFormBuilder.php         Re-encodes parsed state as POST body
-│   │   └── HuntgroupCallForwardingService.php   Beacon driver
+│   │   └── HuntgroupCallForwardingService.php   The driver
 │   ├── Logger/HasLogger.php
 │   └── Transport/WpHttpTransport.php      WP HTTP API w/ session cookies
 └── tests/
@@ -111,8 +111,7 @@ The parser and builder tests run against `tests/Fixtures/huntgroup_157626.html`.
 ## Requirements
 
 - WordPress 6.1+
-- PHP 8.1+
-- Beacon plugin (active)
+- PHP 8.4+
 - OpenSSL extension (for password-at-rest; falls back to base64 with a warning if missing)
 
 ## Testing

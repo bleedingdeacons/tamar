@@ -2,11 +2,10 @@
 
 /**
  * Plugin Name: Tamar
- * Description: Beacon driver for Tamar Telecommunications' control panel. Implements Beacon's CallForwardingService contract by reading and writing the hunt-group editor at /phonedivert/huntgroup. Requires the Beacon plugin to be installed and active.
+ * Description: Call forwarding for Tamar Telecommunications' control panel. Implements the Beacon library's CallForwardingService contract by reading and writing the hunt-group editor at /phonedivert/huntgroup, and provides the forwarding roles and the optional forwarding REST API.
  * Version: 2.0.2
  * Requires at least: 6.1
  * Requires PHP: 8.4
- * Requires Plugins: beacon
  * GitHub Plugin URI: https://github.com/bleedingdeacons/tamar
  * GitHub Branch: main
  * Author: The Bleeding Deacons
@@ -20,6 +19,20 @@ declare(strict_types=1);
 
 if (!defined('ABSPATH')) {
     exit;
+}
+
+// Set `define('TAMAR_KILL', true);` in wp-config.php to stand Tamar down
+// without deactivating it. Nothing is bound, so Trusted sees no driver.
+if (defined('TAMAR_KILL') && TAMAR_KILL === true) {
+    if (is_admin()) {
+        add_action('admin_notices', function () {
+            echo '<div class="notice notice-warning"><p>'
+                . '<strong>Tamar:</strong> Plugin is disabled via the '
+                . '<code>TAMAR_KILL</code> kill switch in <code>wp-config.php</code>.'
+                . '</p></div>';
+        });
+    }
+    return;
 }
 
 // Define plugin constants
@@ -39,7 +52,7 @@ define('TAMAR_PLUGIN_FILE', __FILE__);
 // the key deleted in uninstall.php ('tamar_settings').
 define('TAMAR_OPTION_KEY', 'tamar_settings');
 
-// Load Composer autoloader if present.
+// Load Composer autoloader if present. It also supplies the Beacon library.
 $tamar_autoloader = TAMAR_PLUGIN_DIR . 'vendor/autoload.php';
 if (file_exists($tamar_autoloader)) {
     require_once $tamar_autoloader;
@@ -64,23 +77,33 @@ spl_autoload_register(function ($class) {
     }
 });
 
-// Tamar binds its driver on `beacon/loaded`, which fires during
-// `plugins_loaded` from Beacon. We hook there to register against
-// whichever container Beacon ended up using (its own minimal PSR-11
-// container, or a shared one provided via the `beacon/container` filter).
-add_action('beacon/loaded', function ($container) {
+// The forwarding roles belonged to the Beacon plugin until Beacon became a
+// library. Tamar is now the plugin that owns them.
+register_activation_hook(__FILE__, [\Beacon\Capabilities\CapabilityBootstrap::class, 'register']);
+register_deactivation_hook(__FILE__, [\Beacon\Capabilities\CapabilityBootstrap::class, 'remove']);
+
+// The old Beacon plugin strips these roles when it is deactivated or deleted,
+// and an in-place upgrade never fires the activation hook, so put them back
+// whenever they are missing rather than only on activation.
+add_action('init', function () {
+    if (get_role(\Beacon\Capabilities\CapabilityBootstrap::ROLE_OPERATOR) === null) {
+        \Beacon\Capabilities\CapabilityBootstrap::register();
+    }
+});
+
+add_action('plugins_loaded', function () {
     try {
         if (!class_exists('Tamar\\Plugin')) {
             throw new \Exception('Tamar\\Plugin class not found. Check that Plugin.php exists in the src/ directory.');
         }
 
-        \Tamar\Plugin::init($container);
+        \Tamar\Plugin::init();
 
         /**
-         * Fires after Tamar has bound its concrete driver against
-         * Beacon's CallForwardingService contract.
+         * Fires after Tamar has bound its driver and published it to
+         * Beacon's ForwardingRegistry.
          *
-         * @param \Psr\Container\ContainerInterface $container The shared dependency container
+         * @param \Psr\Container\ContainerInterface $container Tamar's dependency container
          */
         do_action('tamar/loaded', \Tamar\Plugin::getContainer());
     } catch (\Exception $e) {
@@ -98,19 +121,4 @@ add_action('beacon/loaded', function ($container) {
             ? wp_log('tamar')->critical('Tamar Plugin Fatal Error: ' . $e->getMessage(), ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()])
             : error_log('Tamar Plugin Fatal Error: ' . $e->getMessage());
     }
-});
-
-// Surface a notice if Beacon never loaded (e.g. it isn't installed or active).
-// Beacon fires `beacon/loaded` from `plugins_loaded`, so by `admin_init` we
-// know whether it ran. If it didn't, Tamar can't have bound anything.
-add_action('admin_init', function () {
-    if (did_action('beacon/loaded')) {
-        return;
-    }
-    add_action('admin_notices', function () {
-        echo '<div class="notice notice-error is-dismissible"><p>'
-            . '<strong>Tamar Plugin Error:</strong> '
-            . esc_html__('Tamar requires the Beacon plugin to be installed and activated.', 'tamar')
-            . '</p></div>';
-    });
 });

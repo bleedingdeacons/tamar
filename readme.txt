@@ -8,11 +8,11 @@ Build date: 2026/09/22 17:06:47
 Requires PHP: 8.4
 License: MIT (Modified — No Resale)
 
-Beacon driver for Tamar Telecommunications' control panel. Reads and writes the hunt-group editor at /phonedivert/huntgroup.
+Call forwarding for Tamar Telecommunications' control panel. Reads and writes the hunt-group editor at /phonedivert/huntgroup.
 
 == Description ==
 
-Tamar is the implementation half of the Beacon call-forwarding stack. It targets one specific upstream — **Tamar Telecommunications' control panel** (`www.tamartelecommunications.co.uk/phonedivert/...`) — and implements Beacon's `CallForwardingService` contract by reading and writing the hunt-group editor.
+Tamar is the call-forwarding plugin, built on the Beacon library it bundles. It targets one specific upstream — **Tamar Telecommunications' control panel** (`www.tamartelecommunications.co.uk/phonedivert/...`) — and implements Beacon's `CallForwardingService` contract by reading and writing the hunt-group editor.
 
 **How the integration works:**
 
@@ -27,20 +27,19 @@ There is no separate apply step — POSTing the update commits immediately. Beac
 
 == Installation ==
 
-1. Install and activate the **Beacon** plugin first — Tamar depends on its contracts.
-2. Upload the `tamar` directory to `/wp-content/plugins/`.
-3. Activate Tamar through the **Plugins** menu in WordPress.
-4. Configure your Tamar Telecommunications credentials under **Settings → Tamar**.
+1. Upload the `tamar` directory to `/wp-content/plugins/`.
+2. Activate Tamar through the **Plugins** menu in WordPress. This creates the Forwarding Operator, Dispatcher and Viewer roles.
+3. Configure your Tamar Telecommunications credentials under **Settings → Tamar**.
 
 == Frequently Asked Questions ==
 
-= What happens if Beacon is not installed? =
+= Do I still need the Beacon plugin? =
 
-Tamar declares `Requires Plugins: beacon` in its plugin header, so WordPress will prevent activation. If somehow loaded without Beacon, an admin notice will surface and the driver will not bind.
+No. Beacon is now a library bundled inside Tamar. If the old Beacon plugin is still installed, deactivate and delete it; Tamar puts back the forwarding roles that Beacon's deactivation removes.
 
 = How do I disable Tamar without deactivating it? =
 
-Define `TAMAR_KILL` as `true` in `wp-config.php`. Tamar short-circuits before binding its driver, so Beacon falls back to its "no driver" notice.
+Define `TAMAR_KILL` as `true` in `wp-config.php`. Tamar short-circuits before binding its driver, so Trusted sees no forwarding driver.
 
 == Changelog ==
 

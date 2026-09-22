@@ -4,8 +4,95 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f987185a64a0f0165fc4dadc583fcead",
+    "content-hash": "05c9d1fae2d3acb80c92bb4879768627",
     "packages": [
+        {
+            "name": "bleedingdeacons/beacon",
+            "version": "v3.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/bleedingdeacons/beacon.git",
+                "reference": "6fd6138f74dd4005a2d265fa125060cd943038bf"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/bleedingdeacons/beacon/zipball/6fd6138f74dd4005a2d265fa125060cd943038bf",
+                "reference": "6fd6138f74dd4005a2d265fa125060cd943038bf",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.4",
+                "psr/container": "^2.0"
+            },
+            "require-dev": {
+                "bleedingdeacons/wp-mocks": "^3.0",
+                "mockery/mockery": "^1.4",
+                "pestphp/pest": "^5.2",
+                "phpstan/phpstan": "^2.0",
+                "phpunit/phpunit": "^13.0",
+                "squizlabs/php_codesniffer": "^4.0",
+                "szepeviktor/phpstan-wordpress": "^2.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Beacon\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Beacon\\Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "pest"
+                ],
+                "test:unit": [
+                    "pest --testsuite=Unit"
+                ],
+                "test:integration": [
+                    "pest --testsuite=Integration"
+                ],
+                "test:coverage": [
+                    "pest --coverage-html ./tests/coverage"
+                ],
+                "phpcs": [
+                    "phpcs --standard=.phpcs.xml.dist"
+                ],
+                "phpcs:fix": [
+                    "phpcbf --standard=.phpcs.xml.dist"
+                ],
+                "phpstan": [
+                    "phpstan analyse --memory-limit=1G"
+                ],
+                "stan": [
+                    "@phpstan"
+                ],
+                "analyse": [
+                    "@phpstan"
+                ],
+                "check": [
+                    "@phpcs",
+                    "@stan",
+                    "@test"
+                ]
+            },
+            "license": [
+                "MIT (Modified)"
+            ],
+            "authors": [
+                {
+                    "name": "The Bleeding Deacons"
+                }
+            ],
+            "description": "Call-forwarding contracts, models, HTTP transport, capabilities and REST controller, shared by Tamar and Trusted. A Composer library, not a WordPress plugin.",
+            "support": {
+                "source": "https://github.com/bleedingdeacons/beacon/tree/v3.0.0",
+                "issues": "https://github.com/bleedingdeacons/beacon/issues"
+            },
+            "time": "2026-09-22T21:13:18+00:00"
+        },
         {
             "name": "psr/container",
             "version": "2.0.2",

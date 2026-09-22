@@ -1,6 +1,6 @@
 {
     "name": "bleeding-deacons/tamar",
-    "description": "Beacon driver for Tamar Telecommunications' control panel. Reads and writes the hunt-group editor at /phonedivert/huntgroup.",
+    "description": "Call forwarding for Tamar Telecommunications' control panel, built on the Beacon library. Reads and writes the hunt-group editor at /phonedivert/huntgroup.",
     "type": "wordpress-plugin",
     "license": "MIT (Modified)",
     "authors": [
@@ -12,6 +12,10 @@
     "repositories": [
         {
             "type": "vcs",
+            "url": "https://github.com/bleedingdeacons/beacon"
+        },
+        {
+            "type": "vcs",
             "url": "https://github.com/bleedingdeacons/wp-mocks"
         }
     ],
@@ -20,6 +24,7 @@
         "ext-openssl": "*",
         "ext-dom": "*",
         "ext-libxml": "*",
+        "bleedingdeacons/beacon": "^3.0",
         "psr/container": "^2.0"
     },
     "require-dev": {
