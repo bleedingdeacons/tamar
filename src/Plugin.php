@@ -9,15 +9,20 @@ if (!defined('ABSPATH')) {
 }
 
 use Psr\Container\ContainerInterface;
+use Beacon\Core\BeaconContainer;
+use Beacon\Forwarding\ForwardingRegistry;
+use Beacon\Forwarding\Interfaces\CallForwardingService;
+use Beacon\Rest\ForwardingRestController;
 use Tamar\Core\TamarServiceProvider;
 use Tamar\Admin\SettingsPage;
 
 /**
  * Main Tamar Plugin Class.
  *
- * Tamar is the implementation plugin — it binds a concrete driver
- * for {@see \Beacon\Forwarding\Interfaces\CallForwardingService}
- * against Beacon's contract.
+ * Tamar is the call-forwarding plugin. It owns the container its driver
+ * is wired in, publishes that driver through the Beacon library's
+ * {@see ForwardingRegistry} for Trusted to find, and carries what the
+ * Beacon plugin used to: the forwarding roles and the opt-in REST API.
  *
  * The class is intentionally thin. Real work happens in the service
  * provider (container wiring) and the admin page (UI).
@@ -34,15 +39,31 @@ class Plugin
     private static ?ContainerInterface $container = null;
     private static bool $initialized = false;
 
-    public static function init(ContainerInterface $container): void
+    public static function init(): void
     {
         if (self::$initialized) {
             return;
         }
 
+        $container = new BeaconContainer();
         self::$container = $container;
 
         (new TamarServiceProvider())->register($container);
+
+        ForwardingRegistry::bind(static function () use ($container): CallForwardingService {
+            $service = $container->get(CallForwardingService::class);
+            if (!$service instanceof CallForwardingService) {
+                throw new \RuntimeException('Tamar bound something other than a CallForwardingService.');
+            }
+            return $service;
+        });
+
+        // Off unless wp-config.php opts in: this API decides where helpline
+        // calls are routed, and the in-process registry is the supported path.
+        if (defined('BEACON_ENABLE_REST') && BEACON_ENABLE_REST) {
+            (new ForwardingRestController($container))->register();
+            self::logWarning('Forwarding REST API enabled via BEACON_ENABLE_REST — this exposes call-forwarding control over HTTP.');
+        }
 
         // Admin UI bootstraps itself — it reads the bound service out
         // of the container when it needs it rather than holding a

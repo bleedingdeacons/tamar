@@ -19,7 +19,7 @@ use Tamar\Forwarding\HuntgroupFormBuilder;
 use Tamar\Forwarding\HuntgroupPageParser;
 
 /**
- * Wire Tamar's concrete drivers into Beacon's container.
+ * Wire Tamar's concrete drivers into Tamar's container.
  *
  * Three bindings:
  *

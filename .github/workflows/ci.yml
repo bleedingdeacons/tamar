@@ -37,7 +37,7 @@ jobs:
 
     defaults:
       run:
-        # Tamar is checked out alongside Beacon and Sentinel, mirroring a
+        # Tamar is checked out alongside Sentinel, mirroring a
         # WordPress plugins/ directory, so run everything from inside Tamar.
         working-directory: tamar
 
@@ -46,15 +46,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: tamar
-
-      - name: Checkout Beacon
-        # Tamar is a Beacon driver and implements its contracts.
-        # Scanned by phpstan.neon so cross-plugin symbols resolve.
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: bleedingdeacons/beacon
-          ref: main
-          path: beacon
 
       - name: Checkout Sentinel
         # Provides Sentinel_Log_Channel, referenced in type positions by HasLogger.
@@ -332,13 +323,6 @@ jobs:
           # Full history and tags: see the version step below.
           fetch-depth: 0
           path: tamar
-
-      - name: Checkout Beacon
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: bleedingdeacons/beacon
-          ref: main
-          path: beacon
 
       - name: Checkout Sentinel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

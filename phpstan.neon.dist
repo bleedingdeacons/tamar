@@ -42,8 +42,6 @@ parameters:
     # generating autoload rules, so scanDirectories (which reads files
     # directly) is what resolves it. Matches amber and trumpet.
     scanDirectories:
-        # Tamar is a Beacon driver and implements its contracts.
-        - ../beacon/src
         - ../sentinel/src
     scanFiles:
         # Defines TAMAR_OPTION_KEY and the other plugin constants. Not under
