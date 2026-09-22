@@ -7,12 +7,11 @@ namespace Tamar\Tests\Unit;
 use Beacon\Forwarding\Interfaces\ForwardingException;
 use Beacon\Forwarding\Models\ForwardingRule;
 use Beacon\Transport\Interfaces\HttpTransport;
-use BleedingDeacons\WpMocks\TestCase;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
 use Tamar\Forwarding\HuntgroupFormBuilder;
 use Tamar\Forwarding\HuntgroupPageParser;
 
-/**
+/*
  * Tests around the service's externally visible behaviour.
  *
  * We use an in-memory fake transport rather than mocks-as-doubles
@@ -20,251 +19,228 @@ use Tamar\Forwarding\HuntgroupPageParser;
  * POST → page GET → update POST) and the most useful assertions are on
  * the call log, not on individual method invocations.
  */
-final class HuntgroupCallForwardingServiceTest extends TestCase
+
+// -- helpers ----------------------------------------------------------
+
+function makeHuntgroupService(FakeHttpTransport $transport): HuntgroupCallForwardingService
 {
-    public function test_listRules_returns_rules_with_vm_box_resolved(): void
-    {
-        $service = $this->makeService(new FakeHttpTransport(['default' => $this->fixture()]));
+    return new HuntgroupCallForwardingService(
+        transport: $transport,
+        parser: new HuntgroupPageParser(),
+        builder: new HuntgroupFormBuilder(),
+        baseUrl: 'https://example.tamartelecommunications.co.uk',
+        username: 'demo',
+        password: 'pw',
+        huntgroupId: '157626',
+    );
+}
 
-        $rules = $service->listRules();
+function serviceFixture(): string
+{
+    return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_157626.html');
+}
 
-        self::assertCount(4, $rules);
+function serviceListFixture(): string
+{
+    return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_list.html');
+}
+
+/**
+ * @return array<string,string>
+ */
+function decodeServiceBody(string $body): array
+{
+    $out = [];
+    foreach (explode('&', $body) as $pair) {
+        if ($pair === '') {
+            continue;
+        }
+        [$k, $v] = array_pad(explode('=', $pair, 2), 2, '');
+        $out[rawurldecode($k)] = rawurldecode($v);
+    }
+    return $out;
+}
+
+it('returns listRules with the voicemail box resolved', function () {
+    $service = makeHuntgroupService(new FakeHttpTransport(['default' => serviceFixture()]));
+
+    $rules = $service->listRules();
+
+    expect($rules)->toHaveCount(4)
         // Row 1 is the voicemail row — its target_id should be rewritten
         // from 'vm:default' to 'vm:20042' using the selected voicemail box.
-        self::assertSame('vm:20042', $rules[0]->getTargetId());
+        ->and($rules[0]->getTargetId())->toBe('vm:20042')
         // Row 2 keeps the synthetic number target unchanged.
-        self::assertSame('num:01454898476', $rules[1]->getTargetId());
-    }
+        ->and($rules[1]->getTargetId())->toBe('num:01454898476');
+});
 
-    public function test_listRules_caches_within_request(): void
-    {
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        $service = $this->makeService($transport);
+it('caches listRules within a request', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
 
-        $service->listRules();
-        $service->listRules();
-        $service->listTargets();
+    $service->listRules();
+    $service->listRules();
+    $service->listTargets();
 
-        // A single huntgroup-page GET, regardless of how many read
-        // methods we called.
-        $gets = array_filter(
-            $transport->log,
-            fn($e) => $e['method'] === 'GET' && str_contains($e['url'], '/phonedivert/huntgroup')
-        );
-        self::assertCount(1, $gets);
-    }
+    // A single huntgroup-page GET, regardless of how many read
+    // methods we called.
+    $gets = array_filter(
+        $transport->log,
+        fn($e) => $e['method'] === 'GET' && str_contains($e['url'], '/phonedivert/huntgroup')
+    );
+    expect($gets)->toHaveCount(1);
+});
 
-    public function test_login_is_a_get_then_credential_post(): void
-    {
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        $service = $this->makeService($transport);
+it('logs in with a GET then a credential POST', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
 
-        $service->listRules();
+    $service->listRules();
 
-        // GET the login page (session cookie), then POST the credentials
-        // to login.php — username/password under those literal names.
-        $loginGet = array_values(array_filter(
-            $transport->log,
-            fn($e) => $e['method'] === 'GET' && str_ends_with($e['url'], '/phonedivert/login')
-        ));
-        $loginPost = array_values(array_filter(
-            $transport->log,
-            fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/phonedivert/login.php')
-        ));
+    // GET the login page (session cookie), then POST the credentials
+    // to login.php — username/password under those literal names.
+    $loginGet = array_values(array_filter(
+        $transport->log,
+        fn($e) => $e['method'] === 'GET' && str_ends_with($e['url'], '/phonedivert/login')
+    ));
+    $loginPost = array_values(array_filter(
+        $transport->log,
+        fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/phonedivert/login.php')
+    ));
 
-        self::assertCount(1, $loginGet);
-        self::assertCount(1, $loginPost);
+    expect($loginGet)->toHaveCount(1)
+        ->and($loginPost)->toHaveCount(1);
 
-        $decoded = $this->decodeBody($loginPost[0]['body']);
-        self::assertSame('demo', $decoded['username']);
-        self::assertSame('pw', $decoded['password']);
-    }
+    $decoded = decodeServiceBody($loginPost[0]['body']);
+    expect($decoded['username'])->toBe('demo')
+        ->and($decoded['password'])->toBe('pw');
+});
 
-    public function test_saveRule_posts_renumbered_form_body(): void
-    {
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        $service = $this->makeService($transport);
+it('posts a renumbered form body from saveRule', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
 
-        $rules = $service->listRules();
-        $edited = $rules[1]->with(['label' => 'Steve C (out)']);
-        $service->saveRule($edited);
+    $rules = $service->listRules();
+    $edited = $rules[1]->with(['label' => 'Steve C (out)']);
+    $service->saveRule($edited);
 
-        $posts = array_values(array_filter($transport->log, fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/huntgroup/update')));
-        self::assertCount(1, $posts);
-        $decoded = $this->decodeBody($posts[0]['body']);
-        self::assertSame('Steve C (out)', $decoded['2_description']);
-    }
+    $posts = array_values(array_filter($transport->log, fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/huntgroup/update')));
+    expect($posts)->toHaveCount(1);
+    $decoded = decodeServiceBody($posts[0]['body']);
+    expect($decoded['2_description'])->toBe('Steve C (out)');
+});
 
-    public function test_saveRule_throws_on_invalid_rule(): void
-    {
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        $service = $this->makeService($transport);
+it('throws from saveRule on an invalid rule', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
 
-        // A time-window rule with malformed times must fail validation at
-        // the service boundary, not be sent upstream.
-        $bad = new ForwardingRule([
-            'id' => '2',
-            'match' => ['type' => 'time_window', 'value' => ['from' => 'noon', 'to' => '5pm', 'days' => []]],
-            'target_id' => 'num:0000',
-        ]);
+    // A time-window rule with malformed times must fail validation at
+    // the service boundary, not be sent upstream.
+    $bad = new ForwardingRule([
+        'id' => '2',
+        'match' => ['type' => 'time_window', 'value' => ['from' => 'noon', 'to' => '5pm', 'days' => []]],
+        'target_id' => 'num:0000',
+    ]);
 
-        $this->expectException(ForwardingException::class);
-        try {
-            $service->saveRule($bad);
-        } finally {
-            $posts = array_filter($transport->log, fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/huntgroup/update'));
-            self::assertCount(0, $posts);
-        }
-    }
+    expect(fn () => $service->saveRule($bad))->toThrow(ForwardingException::class);
 
-    public function test_deleteRule_returns_false_when_id_absent(): void
-    {
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        $service = $this->makeService($transport);
+    $posts = array_filter($transport->log, fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/huntgroup/update'));
+    expect($posts)->toHaveCount(0);
+});
 
-        self::assertFalse($service->deleteRule('999'));
-        $posts = array_filter($transport->log, fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/huntgroup/update'));
-        self::assertCount(0, $posts);
-    }
+it('returns false from deleteRule when the id is absent', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
 
-    public function test_commit_is_a_noop_success(): void
-    {
-        // Tamar applies on each update — there's no separate apply step.
-        // Calling commit() shouldn't hit the upstream at all.
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        $service = $this->makeService($transport);
+    expect($service->deleteRule('999'))->toBeFalse();
+    $posts = array_filter($transport->log, fn($e) => $e['method'] === 'POST' && str_contains($e['url'], '/huntgroup/update'));
+    expect($posts)->toHaveCount(0);
+});
 
-        self::assertTrue($service->commit());
-        self::assertSame([], $transport->log);
-    }
+it('treats commit as a no-op success', function () {
+    // Tamar applies on each update — there's no separate apply step.
+    // Calling commit() shouldn't hit the upstream at all.
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
 
-    public function test_testConnection_logs_in_and_fetches_once(): void
-    {
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        $service = $this->makeService($transport);
+    expect($service->commit())->toBeTrue()
+        ->and($transport->log)->toBe([]);
+});
 
-        self::assertTrue($service->testConnection());
+it('logs in and fetches once on testConnection', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
 
-        $pageGets = array_filter($transport->log, fn($e) => $e['method'] === 'GET' && str_contains($e['url'], '/phonedivert/huntgroup'));
-        self::assertCount(1, $pageGets);
-    }
+    expect($service->testConnection())->toBeTrue();
 
-    public function test_login_aborts_when_credentials_missing(): void
-    {
-        $transport = new FakeHttpTransport(['default' => $this->fixture()]);
-        // Empty password — login should be refused before any HTTP call.
-        $service = new HuntgroupCallForwardingService(
-            transport: $transport,
-            parser: new HuntgroupPageParser(),
-            builder: new HuntgroupFormBuilder(),
-            baseUrl: 'https://example.tamartelecommunications.co.uk',
-            username: 'demo',
-            password: '',
-            huntgroupId: '157626',
-        );
+    $pageGets = array_filter($transport->log, fn($e) => $e['method'] === 'GET' && str_contains($e['url'], '/phonedivert/huntgroup'));
+    expect($pageGets)->toHaveCount(1);
+});
 
-        try {
-            $service->testConnection();
-            self::fail('Expected ForwardingException when credentials are missing.');
-        } catch (ForwardingException $e) {
-            self::assertStringContainsString('not configured', $e->getMessage());
-        }
+it('aborts login when credentials are missing', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    // Empty password — login should be refused before any HTTP call.
+    $service = new HuntgroupCallForwardingService(
+        transport: $transport,
+        parser: new HuntgroupPageParser(),
+        builder: new HuntgroupFormBuilder(),
+        baseUrl: 'https://example.tamartelecommunications.co.uk',
+        username: 'demo',
+        password: '',
+        huntgroupId: '157626',
+    );
 
-        self::assertSame([], $transport->log);
-    }
+    expect(fn () => $service->testConnection())
+        ->toThrow(ForwardingException::class, 'not configured');
 
-    public function test_testConnection_throws_when_login_is_rejected(): void
-    {
-        // A rejected login leaves the session unauthenticated, so the
-        // huntgroup GET returns the login page rather than the editor and
-        // the parser throws. The service surfaces that as a failure.
-        $transport = new FakeHttpTransport([
-            'default' => $this->fixture(),
-            'login_fails' => true,
-        ]);
-        $service = $this->makeService($transport);
+    expect($transport->log)->toBe([]);
+});
 
-        $this->expectException(ForwardingException::class);
-        $service->testConnection();
-    }
+it('throws from testConnection when the login is rejected', function () {
+    // A rejected login leaves the session unauthenticated, so the
+    // huntgroup GET returns the login page rather than the editor and
+    // the parser throws. The service surfaces that as a failure.
+    $transport = new FakeHttpTransport([
+        'default' => serviceFixture(),
+        'login_fails' => true,
+    ]);
+    $service = makeHuntgroupService($transport);
 
-    public function test_listRules_throws_when_upstream_returns_4xx(): void
-    {
-        $transport = new FakeHttpTransport([
-            'default' => $this->fixture(),
-            'override_get_status' => 403,
-        ]);
-        $service = $this->makeService($transport);
+    $service->testConnection();
+})->throws(ForwardingException::class);
 
-        $this->expectException(ForwardingException::class);
-        $service->listRules();
-    }
+it('throws from listRules when the upstream returns a 4xx', function () {
+    $transport = new FakeHttpTransport([
+        'default' => serviceFixture(),
+        'override_get_status' => 403,
+    ]);
+    $service = makeHuntgroupService($transport);
 
-    public function test_listHuntgroups_logs_in_and_reads_the_chooser(): void
-    {
-        $transport = new FakeHttpTransport([
-            'default' => $this->fixture(),
-            'list' => $this->listFixture(),
-        ]);
-        $service = $this->makeService($transport);
+    $service->listRules();
+})->throws(ForwardingException::class);
 
-        $groups = $service->listHuntgroups();
+it('logs in and reads the chooser for listHuntgroups', function () {
+    $transport = new FakeHttpTransport([
+        'default' => serviceFixture(),
+        'list' => serviceListFixture(),
+    ]);
+    $service = makeHuntgroupService($transport);
 
-        self::assertSame([['id' => '157626', 'name' => 'New Rota']], $groups);
+    $groups = $service->listHuntgroups();
 
-        // The chooser is fetched from the huntgroup endpoint with NO
-        // ?huntgroup= query — that's what makes the upstream render the
-        // list rather than a pre-scoped editor.
-        $listGets = array_values(array_filter(
-            $transport->log,
-            fn($e) => $e['method'] === 'GET'
-                && str_contains($e['url'], '/phonedivert/huntgroup')
-                && !str_contains($e['url'], 'huntgroup=')
-        ));
-        self::assertCount(1, $listGets);
-    }
+    expect($groups)->toBe([['id' => '157626', 'name' => 'New Rota']]);
 
-    // -- helpers ----------------------------------------------------------
-
-    private function makeService(FakeHttpTransport $transport): HuntgroupCallForwardingService
-    {
-        return new HuntgroupCallForwardingService(
-            transport: $transport,
-            parser: new HuntgroupPageParser(),
-            builder: new HuntgroupFormBuilder(),
-            baseUrl: 'https://example.tamartelecommunications.co.uk',
-            username: 'demo',
-            password: 'pw',
-            huntgroupId: '157626',
-        );
-    }
-
-    private function fixture(): string
-    {
-        return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_157626.html');
-    }
-
-    private function listFixture(): string
-    {
-        return file_get_contents(__DIR__ . '/../Fixtures/huntgroup_list.html');
-    }
-
-    /**
-     * @return array<string,string>
-     */
-    private function decodeBody(string $body): array
-    {
-        $out = [];
-        foreach (explode('&', $body) as $pair) {
-            if ($pair === '') {
-                continue;
-            }
-            [$k, $v] = array_pad(explode('=', $pair, 2), 2, '');
-            $out[rawurldecode($k)] = rawurldecode($v);
-        }
-        return $out;
-    }
-}
+    // The chooser is fetched from the huntgroup endpoint with NO
+    // ?huntgroup= query — that's what makes the upstream render the
+    // list rather than a pre-scoped editor.
+    $listGets = array_values(array_filter(
+        $transport->log,
+        fn($e) => $e['method'] === 'GET'
+            && str_contains($e['url'], '/phonedivert/huntgroup')
+            && !str_contains($e['url'], 'huntgroup=')
+    ));
+    expect($listGets)->toHaveCount(1);
+});
 
 /**
  * In-memory HTTP transport double. Records every call to `log` and

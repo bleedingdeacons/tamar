@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Tamar PHPUnit bootstrap.
+ * Tamar test bootstrap (Pest, running on PHPUnit).
  *
  * WordPress stand-ins come from bleedingdeacons/wp-mocks, shared across the
  * plugin suite. Its bootstrap loads Patchwork before anything patchable, so

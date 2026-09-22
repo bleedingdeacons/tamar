@@ -125,7 +125,7 @@ composer install
 
 | Command | Description |
 |---|---|
-| `composer test` | Run the full PHPUnit test suite |
+| `composer test` | Run the full Pest test suite |
 | `composer test:unit` | Run unit tests only |
 | `composer test:integration` | Run integration tests only |
 | `composer test:coverage` | Generate an HTML coverage report |
