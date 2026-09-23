@@ -100,6 +100,7 @@ it('flattens a rule into a row, resolving its target', function () {
         'target_id' => 'num:2',
         'kind' => 'number',
         'address' => '01454 898476',
+        'telephone' => '01454 898476',
         'enabled' => 'no',
     ]);
 });
@@ -124,7 +125,7 @@ it('prints the day\'s rows with the default fields', function () {
 
     expect($printed[0])->toBe('table')
         ->and(labels($printed[1]))->toBe(['Tuesday'])
-        ->and($printed[2])->toBe(['priority', 'label', 'days', 'from', 'to', 'target', 'enabled']);
+        ->and($printed[2])->toBe(['priority', 'label', 'days', 'from', 'to', 'target', 'telephone', 'enabled']);
 });
 
 it('splits --fields and passes --format through', function () {
@@ -162,3 +163,13 @@ it('reports an upstream failure as a CLI error', function () {
 
     (new RulesCommand($container))->listRules([], []);
 })->throws(\RuntimeException::class, 'Login failed');
+
+it('leaves telephone empty for a target that is not a number', function () {
+    $rows = cliCommand([])->rows(
+        [cliRule('Out of hours', 1, ['sun'], '22:00', '23:59'), cliRule('Ghost', 2, ['sun'], '10:00', '14:00')],
+        [new ForwardingTarget(['id' => 'num:1', 'kind' => 'voicemail', 'label' => 'Voice to Email', 'address' => '20042'])]
+    );
+
+    expect(array_column($rows, 'telephone'))->toBe(['', ''])
+        ->and($rows[0]['address'])->toBe('20042');
+});
