@@ -51,6 +51,9 @@ class PluginBuilder
         // Tests
             'tests',
 
+        // Static-analysis stubs (WP-CLI); never loaded at runtime
+            'stubs',
+
         // Setup/config files not needed in production
             'setup',
             'node_modules',
