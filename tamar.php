@@ -3,7 +3,7 @@
 /**
  * Plugin Name: Tamar
  * Description: Call forwarding for Tamar Telecommunications' control panel. Implements the Beacon library's CallForwardingService contract by reading and writing the hunt-group editor at /phonedivert/huntgroup, and provides the forwarding roles and the optional forwarding REST API.
- * Version: 3.0.0
+ * Version: 3.1.0
  * Requires at least: 6.1
  * Requires PHP: 8.4
  * GitHub Plugin URI: https://github.com/bleedingdeacons/tamar
