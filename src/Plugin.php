@@ -15,6 +15,7 @@ use Beacon\Forwarding\Interfaces\CallForwardingService;
 use Beacon\Rest\ForwardingRestController;
 use Tamar\Core\TamarServiceProvider;
 use Tamar\Admin\SettingsPage;
+use Tamar\Cli\RulesCommand;
 
 /**
  * Main Tamar Plugin Class.
@@ -72,6 +73,12 @@ class Plugin
         // picked up automatically.
         if (is_admin()) {
             (new SettingsPage($container))->register();
+        }
+
+        // Only under WP-CLI: RulesCommand extends WP_CLI_Command, which
+        // does not exist on a web request.
+        if (defined('WP_CLI') && \WP_CLI) {
+            \WP_CLI::add_command('tamar rules', new RulesCommand($container));
         }
 
         self::$initialized = true;

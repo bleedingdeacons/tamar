@@ -31,3 +31,8 @@ WpState::$pluginSlug = 'tamar';
 if (!defined('ABSPATH')) {
     define('ABSPATH', __DIR__ . '/');
 }
+
+// WP-CLI's symbols, for tests/Unit/RulesCommandTest.php. Loaded after
+// Bootstrap::load() so Patchwork can redefine the WP_CLI\Utils functions;
+// WP_CLI::error() throws here where the real one exits.
+require_once __DIR__ . '/../stubs/wp-cli.php';

@@ -47,6 +47,9 @@ parameters:
         # Defines TAMAR_OPTION_KEY and the other plugin constants. Not under
         # paths (which is src only), so it has to be scanned explicitly.
         - tamar.php
+        # WP-CLI's own symbols, for src/Cli. See the file for why this is
+        # not php-stubs/wp-cli-stubs (it pins wordpress-stubs to ^6).
+        - stubs/wp-cli.php
     ignoreErrors:
         # The get_plugin_data and dbDelta entries were removed from here once
         # wordpress-stubs resolved them and they stopped matching.
