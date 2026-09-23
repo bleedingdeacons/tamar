@@ -36,7 +36,7 @@ final class RulesCommand extends WP_CLI_Command
     /** Day codes as the time-window match stores them, Monday first. */
     private const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
-    private const DEFAULT_FIELDS = ['priority', 'label', 'days', 'from', 'to', 'target', 'enabled'];
+    private const DEFAULT_FIELDS = ['priority', 'label', 'days', 'from', 'to', 'target', 'telephone', 'enabled'];
 
     /**
      * The service is read out of the container when a command runs rather
@@ -71,7 +71,7 @@ final class RulesCommand extends WP_CLI_Command
      * ---
      *
      * [--fields=<fields>]
-     * : Comma-separated fields to show. Default: priority,label,days,from,to,target,enabled.
+     * : Comma-separated fields to show. Default: priority,label,days,from,to,target,telephone,enabled.
      * Also available: id, match, target_id, kind, address.
      *
      * [--format=<format>]
@@ -186,6 +186,9 @@ final class RulesCommand extends WP_CLI_Command
                 'target_id' => $rule->getTargetId(),
                 'kind'      => $target !== null ? $target->getKind() : '',
                 'address'   => $target !== null ? $target->getAddress() : '',
+                // Only a number target's address is a phone number; a
+                // voicemail's is a mailbox id and a queue's is the queue's.
+                'telephone' => $target !== null && $target->getKind() === 'number' ? $target->getAddress() : '',
                 'enabled'   => $rule->isEnabled() ? 'yes' : 'no',
             ];
         }
