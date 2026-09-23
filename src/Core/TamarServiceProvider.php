@@ -12,7 +12,6 @@ use Psr\Container\ContainerInterface;
 use Beacon\Forwarding\Interfaces\CallForwardingService;
 use Beacon\Transport\Interfaces\HttpTransport;
 use Beacon\Transport\Interfaces\HttpTransportFactory;
-use Beacon\Transport\UserAgent;
 use Beacon\Transport\WpHttpTransportFactory;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
 use Tamar\Forwarding\HuntgroupFormBuilder;
@@ -49,6 +48,21 @@ use Tamar\Forwarding\HuntgroupPageParser;
  */
 final class TamarServiceProvider
 {
+    /**
+     * Desktop Chrome on Windows, in the reduced form Chrome itself sends
+     * (major version only). Chrome 154 was stable on 2026-09-22.
+     *
+     * This replaced Beacon's descriptive "Tamar/x.y.z (contact; site)"
+     * user-agent. That shape was a fix for SiteGround blocking *inbound*
+     * REST calls to this site, and had been carried onto this outbound
+     * page scrape where it did nothing useful. The panel is an ordinary
+     * logged-in web page, so a browser's user-agent is the honest fit.
+     *
+     * Nothing checks the version, but it ages; raise it now and then.
+     */
+    public const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+        . '(KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
+
     public function register(ContainerInterface $container): void
     {
         if (!method_exists($container, 'factory')) {
@@ -64,12 +78,9 @@ final class TamarServiceProvider
             return new WpHttpTransportFactory(
                 verifyTls: $settings['verify_tls'],
                 timeoutSeconds: $settings['timeout'],
-                // Tamar owns this conversation, so the panel sees Tamar
-                // rather than the Beacon framework underneath it. A
-                // user-agent naming the plugin, its version and a contact
-                // address is what keeps the panel's bot protection from
-                // challenging the request.
-                userAgent: UserAgent::forApp('Tamar', defined('TAMAR_VERSION') ? TAMAR_VERSION : ''),
+                // The panel is a web UI this plugin logs in to and reads
+                // as a browser would, so it introduces itself as one.
+                userAgent: self::BROWSER_USER_AGENT,
                 // Attribute the generic Beacon transport's HTTP logging
                 // to Tamar's own channel, so a log line names the plugin
                 // the traffic belongs to rather than the transport class.
