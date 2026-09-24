@@ -18,12 +18,14 @@ Tamar is the call-forwarding plugin, built on the Beacon library it bundles. It 
 
 The upstream is a session-cookie-authenticated HTML admin. There is no public API, so the driver shapes its calls the same way a human admin would point a browser at it:
 
-1. **Login.** POST the credentials to `/customer-login/` (form id `login`). Success/failure is signalled in the post-login URL — `?logged_in=1` on success, `?notify=failedlogin` on a rejected credential — not by the HTTP status, so the driver inspects the redirect rather than the status code. The transport retains the session cookie for subsequent calls.
+1. **Login.** GET the login page (`/customer-login/`), which sets the session cookies, then POST `username` and `password` to `/phonedivert/login.php`. A login that did not take is caught when the next page comes back as the login form instead of the editor.
 2. **Read.** GET `/phonedivert/huntgroup?huntgroup=<id>`. Parse out the top-level rota metadata (name, announcement, voicemail, hunting strategy), every `<tr class="huntdest">` rota row, and the available voicemail boxes.
 3. **Mutate.** Apply the operator's edit to the parsed state in memory.
 4. **Save.** POST the whole rota back, form-urlencoded, to `/phonedivert/huntgroup/update`. The upstream replaces the entire rota with the submitted body, so the driver re-encodes every row, not just the changed one.
 
 There is no separate apply step — POSTing the update commits immediately. Beacon's `commit()` is therefore a no-op success on this driver. There is also no CSRF token on this form; auth is the session cookie alone.
+
+The session outlives the request that logged in, so the panel does not see a login on every page load. It is stored encrypted in the `tamar_panel_session` option, retired at a random age between 10 and 30 minutes, and replaced by a fresh login whenever the panel refuses it. Saving the settings, or uninstalling, clears it.
 
 == Installation ==
 

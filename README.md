@@ -27,12 +27,22 @@ Until Beacon v3.0.0, Beacon was a plugin that had to be active alongside Tamar, 
 
 The upstream is a session-cookie-authenticated HTML admin. There is no public API, so the driver shapes its calls the same way a human admin would point a browser at it:
 
-1. **Login.** POST the credentials to `/customer-login/` (form id `login`). Success/failure is signalled in the post-login URL — `?logged_in=1` on success, `?notify=failedlogin` on a rejected credential — not by the HTTP status, so the driver inspects the redirect rather than the status code. The transport retains the session cookie for subsequent calls.
+1. **Login.** GET the login page (`/customer-login/`), which sets the `PHPSESSID` and `loginsession` cookies, then POST `username` and `password` to `/phonedivert/login.php`. Success is not signalled by the status code; a login that did not take is caught when the next page comes back as the login form instead of the editor. The session is stored (see below), so this happens far less often than once per request.
 2. **Read.** GET `/phonedivert/huntgroup?huntgroup=<id>`. Parse out the top-level rota metadata (name, announcement, voicemail, hunting strategy), every `<tr class="huntdest">` rota row, and the available voicemail boxes.
 3. **Mutate.** Apply the operator's edit to the parsed state in memory.
 4. **Save.** POST the whole rota back, form-urlencoded, to `/phonedivert/huntgroup/update`. The upstream replaces the entire rota with the submitted body, so the driver re-encodes every row, not just the changed one.
 
 There is **no separate apply step** — POSTing the update commits immediately. Beacon's `commit()` is therefore a no-op success on this driver. There is also **no CSRF token** on this form; auth is the session cookie alone.
+
+### Session reuse
+
+Logging in on every WordPress request that touches forwarding is the pattern a bot detector looks for, so the session outlives the request that logged in. Once a page has proved it authenticated, the cookies are stored, encrypted with the password's key, in a non-autoloaded `tamar_panel_session` option, and later requests send them instead of logging in.
+
+- **Retired at a random age.** Each session is given a lifetime drawn at random between 10 and 30 minutes when it is created, and is dropped unused once past it. The panel's own `loginsession` cookie lasts 8 hours from issue, and its PHP session may lapse sooner when idle.
+- **Recovered on rejection.** A stored session the panel no longer accepts comes back as the login page. The driver drops it, logs in afresh and retries once. A network failure is not retried.
+- **Scoped to its settings.** The row records a hash of the panel URL and username and is ignored under any other; saving the settings page clears it, and so does uninstalling. **Test connection** always performs a real login, since proving the credentials is its job.
+
+The log records each reuse, retirement and refusal with the session's age, so how long the panel actually honours a session can be read from it.
 
 ### Rule mapping
 
@@ -96,9 +106,10 @@ tamar/
 │   ├── Forwarding/
 │   │   ├── HuntgroupPageParser.php          DOM+XPath parse of the editor page
 │   │   ├── HuntgroupFormBuilder.php         Re-encodes parsed state as POST body
-│   │   └── HuntgroupCallForwardingService.php   The driver
+│   │   ├── HuntgroupCallForwardingService.php   The driver
+│   │   └── PanelSessionStore.php            Stored panel session between requests
 │   ├── Logger/HasLogger.php
-│   └── Transport/WpHttpTransport.php      WP HTTP API w/ session cookies
+│   └── Transport/ResumableSessionTransport.php   Sends a stored session via Beacon's transport
 └── tests/
     ├── Fixtures/huntgroup_157626.html    Trimmed real-page sample
     └── Unit/

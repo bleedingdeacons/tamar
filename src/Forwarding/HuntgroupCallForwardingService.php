@@ -13,6 +13,7 @@ use Beacon\Forwarding\Interfaces\ForwardingException;
 use Beacon\Forwarding\Models\ForwardingRule;
 use Beacon\Transport\Interfaces\HttpTransport;
 use Beacon\Transport\Interfaces\TransportException;
+use Tamar\Transport\ResumableSessionTransport;
 
 /**
  * Concrete Beacon driver for Tamar Telecommunications' hunt-group editor.
@@ -33,6 +34,17 @@ use Beacon\Transport\Interfaces\TransportException;
  *   POST /phonedivert/login.php                   username + password
  *   GET  /phonedivert/huntgroup?huntgroup=<id>    the rota   (→ parser)
  *   POST /phonedivert/huntgroup/update            the rota   (← builder)
+ *
+ * The session outlives the WordPress request that logged in. Given a
+ * {@see PanelSessionStore} and a {@see ResumableSessionTransport}, the
+ * cookies are stored once a page has proved them authenticated, and a
+ * later request sends them again instead of logging in. A session the
+ * panel no longer accepts comes back as the login page (or an error
+ * status) and fails the parse; the stored session is then dropped and
+ * the request logs in afresh and tries once more. Separately, a stored
+ * session is retired unused once it passes the lifetime the store drew
+ * for it. Without a store, or with a transport that cannot resume, the
+ * service logs in on every request as it always did.
  *
  * There is no separate "apply" step — POSTing the update commits
  * immediately — so {@see commit()} is a no-op success for contract
@@ -57,6 +69,20 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
 
     private bool $loggedIn = false;
 
+    /** True while the session in use came from the store rather than a login in this request. */
+    private bool $resumed = false;
+
+    /** When the session in use was logged in, and when it is to be retired. */
+    private int $sessionCreatedAt = 0;
+    private int $sessionExpiresAt = 0;
+
+    /**
+     * What the store holds for the session in use, so an unchanged jar is not rewritten.
+     *
+     * @var array<string,string>
+     */
+    private array $storedCookies = [];
+
     public function __construct(
         private readonly HttpTransport $transport,
         private readonly HuntgroupPageParser $parser,
@@ -69,6 +95,7 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         private readonly string $loginPath = '/phonedivert/login',
         private readonly string $loginSubmitPath = '/phonedivert/login.php',
         private readonly string $updatePath = '/phonedivert/huntgroup/update',
+        private readonly ?PanelSessionStore $sessions = null,
     ) {
     }
 
@@ -142,7 +169,9 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         $this->cache = null;
         $this->loggedIn = false;
 
-        $this->ensureLoggedIn();
+        // This is the settings page's credential check, so it proves the
+        // credentials with a real login rather than a stored session.
+        $this->ensureLoggedIn(allowResume: false);
         $state = $this->load();
 
         self::logInfo('Connection test succeeded', [
@@ -170,16 +199,11 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
      */
     public function listHuntgroups(): array
     {
-        $this->ensureLoggedIn();
-
-        $resp = $this->request('GET', $this->listUrl());
-        if ($resp['status'] >= 400) {
-            throw new ForwardingException(
-                'Upstream returned status ' . $resp['status'] . ' when fetching the hunt-group list.'
-            );
-        }
-
-        $groups = $this->parser->parseHuntgroupList($resp['body']);
+        $groups = $this->fetchAuthenticated(
+            $this->listUrl(),
+            'the hunt-group list',
+            fn (string $body): array => $this->parser->parseHuntgroupList($body),
+        );
         self::logInfo('Listed hunt groups', ['count' => count($groups)]);
         return $groups;
     }
@@ -191,8 +215,12 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
      * to pick up the session cookie, then POST the credentials to the
      * login handler. The transport replays the cookie on every later
      * request.
+     *
+     * A stored session, when there is one, stands in for the login.
+     * Missing credentials still refuse, stored session or not — removing
+     * them is how an operator stops the plugin talking to the panel.
      */
-    private function ensureLoggedIn(): void
+    private function ensureLoggedIn(bool $allowResume = true): void
     {
         if ($this->loggedIn) {
             return;
@@ -201,6 +229,10 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
             throw new ForwardingException(
                 'Upstream login cannot proceed: username and/or password is not configured. Set them under Settings → Tamar.'
             );
+        }
+        if ($allowResume && $this->resumeSession()) {
+            $this->loggedIn = true;
+            return;
         }
 
         $base = rtrim($this->baseUrl, '/');
@@ -225,6 +257,103 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         }
 
         $this->loggedIn = true;
+        $this->resumed = false;
+        $this->sessionCreatedAt = time();
+        $this->sessionExpiresAt = PanelSessionStore::drawExpiry($this->sessionCreatedAt);
+        $this->storedCookies = [];
+    }
+
+    // -- stored session ----------------------------------------------------
+
+    /**
+     * Pick up the stored session, if there is one for these settings and
+     * it has not passed its lifetime. Returns false to log in instead.
+     */
+    private function resumeSession(): bool
+    {
+        $transport = $this->resumableTransport();
+        if ($transport === null || $this->sessions === null) {
+            return false;
+        }
+
+        $stored = $this->sessions->load($this->sessionOwner());
+        if ($stored === null) {
+            return false;
+        }
+
+        $age = max(0, time() - $stored['created_at']);
+        if (time() >= $stored['expires_at']) {
+            self::logInfo('Retiring the stored panel session; it has reached its lifetime', [
+                'age_seconds' => $age,
+                'lifetime_seconds' => max(0, $stored['expires_at'] - $stored['created_at']),
+            ]);
+            $this->sessions->clear();
+            return false;
+        }
+
+        $transport->seed($stored['cookies']);
+        $this->resumed = true;
+        $this->sessionCreatedAt = $stored['created_at'];
+        $this->sessionExpiresAt = $stored['expires_at'];
+        $this->storedCookies = $stored['cookies'];
+
+        self::logInfo('Reusing the stored panel session', [
+            'age_seconds' => $age,
+            'retires_in_seconds' => $stored['expires_at'] - time(),
+        ]);
+        return true;
+    }
+
+    /**
+     * Store the session in use, once a page has shown it is
+     * authenticated. Skipped when the store already has exactly this jar.
+     */
+    private function rememberSession(): void
+    {
+        $transport = $this->resumableTransport();
+        if ($transport === null || $this->sessions === null) {
+            return;
+        }
+
+        $cookies = $transport->cookies();
+        if ($cookies === [] || $cookies == $this->storedCookies) {
+            return;
+        }
+
+        $this->sessions->save($this->sessionOwner(), $cookies, $this->sessionCreatedAt, $this->sessionExpiresAt);
+        $this->storedCookies = $cookies;
+
+        if (!$this->resumed) {
+            self::logInfo('Stored the panel session for reuse', [
+                'cookie_names' => array_keys($cookies),
+                'lifetime_seconds' => $this->sessionExpiresAt - $this->sessionCreatedAt,
+            ]);
+        }
+    }
+
+    /**
+     * Drop a stored session the panel has refused, and stop sending it.
+     */
+    private function discardSession(): void
+    {
+        $this->sessions?->clear();
+        $this->resumableTransport()?->forgetSeeded();
+        $this->loggedIn = false;
+        $this->resumed = false;
+        $this->storedCookies = [];
+    }
+
+    private function resumableTransport(): ?ResumableSessionTransport
+    {
+        if ($this->transport instanceof ResumableSessionTransport && $this->transport->canResume()) {
+            return $this->transport;
+        }
+        return null;
+    }
+
+    private function sessionOwner(): string
+    {
+        return PanelSessionStore::owner($this->baseUrl, $this->username);
     }
 
     // -- page fetch / push -----------------------------------------------
@@ -240,18 +369,61 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         if ($this->cache !== null) {
             return $this->cache;
         }
+        // parse() throws if it got the login page instead of the editor —
+        // that is our backstop for a login that didn't take, and how a
+        // stored session the panel has expired is noticed.
+        return $this->cache = $this->fetchAuthenticated(
+            $this->rulesUrl(),
+            'the hunt-group page',
+            fn (string $body): array => $this->parser->parse($body),
+        );
+    }
+
+    /**
+     * GET a page that needs the login and parse it. When the session was
+     * a stored one and the page does not come back, the panel has most
+     * likely expired it: drop it, log in afresh, and try once more. A
+     * network failure is not retried — logging in would not fix it.
+     *
+     * @template T
+     * @param callable(string): T $parse Throws ForwardingException on a page it does not recognise.
+     * @return T
+     */
+    private function fetchAuthenticated(string $url, string $what, callable $parse): mixed
+    {
         $this->ensureLoggedIn();
 
-        $resp = $this->request('GET', $this->rulesUrl());
-        if ($resp['status'] >= 400) {
-            throw new ForwardingException(
-                'Upstream returned status ' . $resp['status'] . ' when fetching the hunt-group page.'
-            );
+        try {
+            $result = $this->fetchAndParse($url, $what, $parse);
+        } catch (ForwardingException $e) {
+            if (!$this->resumed || $e->getPrevious() instanceof TransportException) {
+                throw $e;
+            }
+            self::logInfo('The panel did not accept the stored session; logging in again', [
+                'age_seconds' => max(0, time() - $this->sessionCreatedAt),
+                'reason' => $e->getMessage(),
+            ]);
+            $this->discardSession();
+            $this->ensureLoggedIn(allowResume: false);
+            $result = $this->fetchAndParse($url, $what, $parse);
         }
 
-        // parse() throws if it got the login page instead of the editor —
-        // that is our backstop for a login that didn't take.
-        return $this->cache = $this->parser->parse($resp['body']);
+        $this->rememberSession();
+        return $result;
+    }
+
+    /**
+     * @template T
+     * @param callable(string): T $parse
+     * @return T
+     */
+    private function fetchAndParse(string $url, string $what, callable $parse): mixed
+    {
+        $resp = $this->request('GET', $url);
+        if ($resp['status'] >= 400) {
+            throw new ForwardingException('Upstream returned status ' . $resp['status'] . ' when fetching ' . $what . '.');
+        }
+        return $parse($resp['body']);
     }
 
     /**
@@ -272,6 +444,9 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
             throw new ForwardingException('Upstream returned status ' . $resp['status'] . ' when saving the rota.');
         }
         $this->cache = null;
+        // Always preceded by a load() in this request, which proved the
+        // session; store anything the save changed about it.
+        $this->rememberSession();
     }
 
     /**

@@ -16,6 +16,8 @@ use Beacon\Transport\WpHttpTransportFactory;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
 use Tamar\Forwarding\HuntgroupFormBuilder;
 use Tamar\Forwarding\HuntgroupPageParser;
+use Tamar\Forwarding\PanelSessionStore;
+use Tamar\Transport\ResumableSessionTransport;
 
 /**
  * Wire Tamar's concrete drivers into Tamar's container.
@@ -35,7 +37,10 @@ use Tamar\Forwarding\HuntgroupPageParser;
  *     Driver specifically targets Tamar Telecommunications'
  *     `/phonedivert/huntgroup` editor. Settings are read inside the
  *     factory, not at registration time, so an admin-page save takes
- *     effect on the next request without needing a page reload.
+ *     effect on the next request without needing a page reload. The
+ *     driver's transport is wrapped in {@see ResumableSessionTransport}
+ *     and handed a {@see PanelSessionStore}, so one login serves
+ *     many requests instead of one.
  *
  * All bindings are factories so a request that never touches
  * forwarding (a front-end page hit) doesn't pay the cost of building
@@ -100,7 +105,7 @@ final class TamarServiceProvider
             $settings = \Tamar\Admin\TamarSettings::load();
 
             return new HuntgroupCallForwardingService(
-                transport: $transport,
+                transport: new ResumableSessionTransport($transport),
                 parser: new HuntgroupPageParser(),
                 builder: new HuntgroupFormBuilder(),
                 baseUrl: rtrim($settings['base_url'], '/'),
@@ -111,6 +116,7 @@ final class TamarServiceProvider
                 loginPath: $settings['login_path'],
                 loginSubmitPath: $settings['login_submit_path'],
                 updatePath: $settings['commit_path'],
+                sessions: new PanelSessionStore(),
             );
         });
 
