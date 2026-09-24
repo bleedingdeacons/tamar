@@ -113,6 +113,10 @@ final class TamarSettings
         ];
 
         update_option(TAMAR_OPTION_KEY, $next);
+
+        // A stored panel session belongs to the settings it logged in
+        // with. Start again from these ones.
+        (new \Tamar\Forwarding\PanelSessionStore())->clear();
     }
 
     /**
@@ -126,6 +130,24 @@ final class TamarSettings
         if ($cipher === '') {
             return '';
         }
+        return self::decrypt($cipher);
+    }
+
+    /**
+     * Encrypt a secret other than the password — the stored panel
+     * session — with the same key, scheme and fallback.
+     */
+    public static function seal(string $plaintext): string
+    {
+        return self::encrypt($plaintext);
+    }
+
+    /**
+     * Decrypt a value from {@see seal()}. Returns '' for anything that
+     * does not decrypt.
+     */
+    public static function unseal(string $cipher): string
+    {
         return self::decrypt($cipher);
     }
 
@@ -186,7 +208,7 @@ final class TamarSettings
             // sentinel-wrapped form so we don't lose the operator's
             // input. They can re-save once the host's OpenSSL is
             // healthy.
-            \Tamar\Plugin::logWarning('openssl_encrypt failed; storing password unencrypted.');
+            \Tamar\Plugin::logWarning('openssl_encrypt failed; storing the secret unencrypted.');
             return 'plain:' . base64_encode($plaintext);
         }
         return 'gcm:' . base64_encode($iv . $tag . $ct);
