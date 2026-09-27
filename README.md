@@ -71,9 +71,12 @@ The top-level **Tamar** menu in the WordPress admin (**Tamar → Settings**):
 | Hunt-group page path | GET endpoint. Default `/phonedivert/huntgroup`. |
 | Login path | Default `/customer-login/`. |
 | Update path | POST endpoint that saves the rota. Default `/phonedivert/huntgroup/update`. |
-| **Hunt group ID** | The numeric ID from the upstream edit URL — e.g. `157626` from `.../huntgroup?huntgroup=157626`. This is per-client; without it Tamar can't tell which hunt group on the account to edit. |
 | Verify TLS certificate | Default on. Disable only for self-signed dev hosts. |
 | Timeout | Per-request HTTP timeout in seconds. |
+
+### Hunt group
+
+The hunt group is chosen on **Tamar → Overview**, above the call flow it scopes. Once the credentials above are saved and Tamar can log in, it is a dropdown of the account's hunt groups by name; until then it takes the numeric ID from the upstream edit URL — e.g. `157626` from `.../huntgroup?huntgroup=157626`. Without it Tamar can't tell which hunt group on the account to edit. **Refresh** reloads both the list and the call flow from the panel.
 
 ## Hooks
 
@@ -87,7 +90,7 @@ The top-level **Tamar** menu in the WordPress admin (**Tamar → Settings**):
 | Capability | Where |
 |---|---|
 | `beacon_view_forwarding` | Required to see the settings page. |
-| `beacon_manage_forwarding` | Required to save settings. |
+| `beacon_manage_forwarding` | Required to save settings and to change the hunt group. |
 | `beacon_push_config` | Required to use the "Apply pending changes" button. (Tamar's commit is a no-op, but the capability still gates the button.) |
 
 ## File layout

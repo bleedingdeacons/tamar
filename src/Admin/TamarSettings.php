@@ -103,11 +103,7 @@ final class TamarSettings
             'login_path' => self::sanitisePath((string) ($input['login_path'] ?? $existing['login_path'])),
             'login_submit_path' => self::sanitisePath((string) ($input['login_submit_path'] ?? $existing['login_submit_path'])),
             'commit_path' => self::sanitisePath((string) ($input['commit_path'] ?? $existing['commit_path'])),
-            // The upstream hunt group ID is numeric (e.g. 157626). Strip
-            // anything that isn't a digit so a pasted value like "#157626"
-            // or a trailing space can't break the ?huntgroup= query param.
-            // An empty result is allowed — it just means "not configured yet".
-            'huntgroup_id' => preg_replace('/\D+/', '', (string) ($input['huntgroup_id'] ?? $existing['huntgroup_id'])) ?? '',
+            'huntgroup_id' => self::sanitiseHuntgroupId((string) ($input['huntgroup_id'] ?? $existing['huntgroup_id'])),
             'verify_tls' => !empty($input['verify_tls']),
             'timeout' => max(1, min(120, (int) ($input['timeout'] ?? $existing['timeout']))),
         ];
@@ -117,6 +113,32 @@ final class TamarSettings
         // A stored panel session belongs to the settings it logged in
         // with. Start again from these ones.
         (new \Tamar\Forwarding\PanelSessionStore())->clear();
+    }
+
+    /**
+     * Change the hunt group and nothing else — the Overview page's
+     * chooser. Not a partial {@see save()}: that reads an absent
+     * `verify_tls` checkbox as unticked, so it would switch TLS
+     * verification off. The stored panel session is kept, since the
+     * login it holds is for the account, not for one hunt group.
+     */
+    public static function saveHuntgroupId(string $raw): void
+    {
+        $settings = self::load();
+        $settings['huntgroup_id'] = self::sanitiseHuntgroupId($raw);
+
+        update_option(TAMAR_OPTION_KEY, $settings);
+    }
+
+    /**
+     * The upstream hunt group ID is numeric (e.g. 157626). Strip anything
+     * that isn't a digit so a pasted value like "#157626" or a trailing
+     * space can't break the ?huntgroup= query param. An empty result is
+     * allowed — it just means "not configured yet".
+     */
+    private static function sanitiseHuntgroupId(string $raw): string
+    {
+        return preg_replace('/\D+/', '', $raw) ?? '';
     }
 
     /**
