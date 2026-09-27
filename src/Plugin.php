@@ -16,6 +16,7 @@ use Beacon\Rest\ForwardingRestController;
 use Tamar\Core\TamarServiceProvider;
 use Tamar\Admin\SettingsPage;
 use Tamar\Cli\RulesCommand;
+use Tamar\Forwarding\HuntgroupPublishFilter;
 
 /**
  * Main Tamar Plugin Class.
@@ -65,6 +66,10 @@ class Plugin
             (new ForwardingRestController($container))->register();
             self::logWarning('Forwarding REST API enabled via BEACON_ENABLE_REST — this exposes call-forwarding control over HTTP.');
         }
+
+        // Registered on every request, not just in admin: it is how
+        // another plugin (Trusted) publishes a week's rota to the panel.
+        (new HuntgroupPublishFilter($container))->register();
 
         // Admin UI bootstraps itself — it reads the bound service out
         // of the container when it needs it rather than holding a
