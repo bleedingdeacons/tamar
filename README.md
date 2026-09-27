@@ -71,6 +71,7 @@ The top-level **Tamar** menu in the WordPress admin (**Tamar → Settings**):
 | Hunt-group page path | GET endpoint. Default `/phonedivert/huntgroup`. |
 | Login path | Default `/customer-login/`. |
 | Update path | POST endpoint that saves the rota. Default `/phonedivert/huntgroup/update`. |
+| Office number | The office's telephone number. Default `0117 946 0754`; digits, spaces and a leading `+` are kept, and an empty value goes back to the default. Read it with `TamarSettings::load()['office_number']`. |
 | Verify TLS certificate | Default on. Disable only for self-signed dev hosts. |
 | Timeout | Per-request HTTP timeout in seconds. |
 

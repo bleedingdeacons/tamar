@@ -36,6 +36,9 @@ final class TamarSettings
     /** GCM authentication tag length in bytes (128-bit). */
     private const GCM_TAG_LEN = 16;
 
+    /** The office's telephone number until one is saved. */
+    public const DEFAULT_OFFICE_NUMBER = '0117 946 0754';
+
     /**
      * Return a fully-populated settings array. Missing keys are
      * filled in with safe defaults so callers can rely on the shape.
@@ -49,6 +52,7 @@ final class TamarSettings
      *   login_submit_path:string,
      *   commit_path:string,
      *   huntgroup_id:string,
+     *   office_number:string,
      *   verify_tls:bool,
      *   timeout:int
      * }
@@ -72,6 +76,7 @@ final class TamarSettings
             // save(). Empty on a fresh install; the driver can't scope
             // to a hunt group until it's set.
             'huntgroup_id' => (string) ($raw['huntgroup_id'] ?? ''),
+            'office_number' => (string) ($raw['office_number'] ?? self::DEFAULT_OFFICE_NUMBER),
             'verify_tls' => (bool) ($raw['verify_tls'] ?? true),
             'timeout' => max(1, (int) ($raw['timeout'] ?? 15)),
         ];
@@ -104,6 +109,7 @@ final class TamarSettings
             'login_submit_path' => self::sanitisePath((string) ($input['login_submit_path'] ?? $existing['login_submit_path'])),
             'commit_path' => self::sanitisePath((string) ($input['commit_path'] ?? $existing['commit_path'])),
             'huntgroup_id' => self::sanitiseHuntgroupId((string) ($input['huntgroup_id'] ?? $existing['huntgroup_id'])),
+            'office_number' => self::sanitiseOfficeNumber((string) ($input['office_number'] ?? $existing['office_number'])),
             'verify_tls' => !empty($input['verify_tls']),
             'timeout' => max(1, min(120, (int) ($input['timeout'] ?? $existing['timeout']))),
         ];
@@ -139,6 +145,24 @@ final class TamarSettings
     private static function sanitiseHuntgroupId(string $raw): string
     {
         return preg_replace('/\D+/', '', $raw) ?? '';
+    }
+
+    /**
+     * A telephone number as typed — digits, spaces and a leading + are
+     * kept, so "0117 946 0754" stays readable. Anything else is dropped,
+     * and a number left empty goes back to the default rather than
+     * leaving the office with no number.
+     */
+    private static function sanitiseOfficeNumber(string $raw): string
+    {
+        $number = (string) preg_replace('/[^\d+\s]/', '', $raw);
+        $number = trim((string) preg_replace('/\s+/', ' ', $number));
+
+        // A + belongs only at the front.
+        $plus = str_starts_with($number, '+') ? '+' : '';
+        $number = $plus . trim(str_replace('+', '', $number));
+
+        return preg_match('/\d/', $number) === 1 ? $number : self::DEFAULT_OFFICE_NUMBER;
     }
 
     /**

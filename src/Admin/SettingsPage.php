@@ -214,6 +214,14 @@ final class SettingsPage
         echo '<td><input id="tamar-commit-path" name="commit_path" type="text" class="regular-text" value="' . esc_attr($settings['commit_path']) . '"' . $disabled . '>';
         echo '<p class="description">' . esc_html__('POST endpoint that saves the rota. Default: /phonedivert/huntgroup/update', 'tamar') . '</p></td></tr>';
 
+        echo '<tr><th><label for="tamar-office-number">' . esc_html__('Office number', 'tamar') . '</label></th>';
+        echo '<td><input id="tamar-office-number" name="office_number" type="tel" class="regular-text" value="' . esc_attr($settings['office_number']) . '"' . $disabled . '>';
+        echo '<p class="description">' . esc_html(sprintf(
+            /* translators: %s: the default office telephone number. */
+            __('The office\'s telephone number. Left empty, it goes back to %s.', 'tamar'),
+            TamarSettings::DEFAULT_OFFICE_NUMBER
+        )) . '</p></td></tr>';
+
         echo '<tr><th><label for="tamar-verify-tls">' . esc_html__('Verify TLS certificate', 'tamar') . '</label></th>';
         echo '<td><label><input id="tamar-verify-tls" name="verify_tls" type="checkbox" value="1"' . checked($settings['verify_tls'], true, false) . $disabled . '> ' . esc_html__('Recommended on; disable only for development against a self-signed certificate.', 'tamar') . '</label></td></tr>';
 
