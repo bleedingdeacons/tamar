@@ -208,6 +208,139 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         return $groups;
     }
 
+    /**
+     * Write a whole rota into the hunt group called $name, creating the
+     * group first if the account has none by that name, and return its id.
+     *
+     * The group is found by name both times rather than read from the
+     * create response, whose shape nothing here depends on. A name that
+     * already exists is reused, so publishing the same week twice
+     * overwrites its rows instead of making a second group.
+     *
+     * Every row of the target group is replaced. A new group comes with
+     * the panel's defaults — no voicemail box, among them — so the
+     * greeting, voicemail box and hunting strategy are taken from the
+     * configured hunt group, when there is one, as is the ring timeout
+     * for each row. Rules are written in priority order and their ids
+     * are ignored.
+     *
+     * @param ForwardingRule[] $rules
+     * @throws ForwardingException
+     */
+    public function publishHuntgroup(string $name, array $rules): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            throw new ForwardingException('A hunt group needs a name.');
+        }
+        foreach ($rules as $rule) {
+            $this->validateRule($rule);
+        }
+
+        $template = $this->huntgroupId !== '' ? $this->load() : ['meta' => [], 'rules' => []];
+
+        $id = $this->huntgroupIdNamed($name);
+        if ($id === null) {
+            $this->createHuntgroup($name);
+            $id = $this->huntgroupIdNamed($name);
+            if ($id === null) {
+                throw new ForwardingException(
+                    'Asked the Tamar control panel to create hunt group "' . $name . '", but it is not in the hunt-group list afterwards.'
+                );
+            }
+        }
+
+        $state = $this->fetchAuthenticated(
+            $this->editorUrl($id),
+            'hunt group "' . $name . '"',
+            fn (string $body): array => $this->parser->parse($body),
+        );
+
+        $templateMeta = $template['meta'];
+        $state['meta']['name'] = $name;
+        $state['meta']['huntgroup_id'] = $id;
+        foreach (['greeting', 'voicemail', 'hunting'] as $field) {
+            if (isset($templateMeta[$field])) {
+                $state['meta'][$field] = $templateMeta[$field];
+            }
+        }
+
+        usort($rules, static fn (ForwardingRule $a, ForwardingRule $b): int
+            => $a->getPriority() <=> $b->getPriority());
+        $timeout = $this->commonTimeout($template);
+        $state['rules'] = [];
+        foreach ($rules as $rule) {
+            $row = $this->ruleToRow($rule->with(['id' => '']), $state);
+            $row['_raw']['timeout'] = $timeout;
+            $state['rules'][] = $row;
+        }
+
+        $this->pushState($state);
+
+        self::logInfo('Published hunt group', [
+            'huntgroup_id' => $id,
+            'name' => $name,
+            'rule_count' => count($rules),
+        ]);
+        return $id;
+    }
+
+    /**
+     * The id of the hunt group with exactly this name, or null.
+     */
+    private function huntgroupIdNamed(string $name): ?string
+    {
+        foreach ($this->listHuntgroups() as $group) {
+            if ($group['name'] === $name) {
+                return $group['id'];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Submit the panel's "Create new hunt group" form, which posts the
+     * name as `description` beside the hunt-group list.
+     */
+    private function createHuntgroup(string $name): void
+    {
+        $this->ensureLoggedIn();
+        $resp = $this->request(
+            'POST',
+            rtrim($this->listUrl(), '/') . '/create',
+            http_build_query(['description' => $name]),
+        );
+        if ($resp['status'] >= 400) {
+            throw new ForwardingException(
+                'Upstream returned status ' . $resp['status'] . ' when creating hunt group "' . $name . '".'
+            );
+        }
+        self::logInfo('Created hunt group', ['name' => $name]);
+    }
+
+    /**
+     * The ring timeout the configured group's rows use most, or the
+     * panel's default of 20 seconds when it has none.
+     *
+     * @param array<string,mixed> $state
+     */
+    private function commonTimeout(array $state): int
+    {
+        $timeouts = [];
+        foreach (($state['rules'] ?? []) as $row) {
+            $raw = is_array($row) && is_array($row['_raw'] ?? null) ? $row['_raw'] : [];
+            if (isset($raw['timeout'])) {
+                $timeouts[] = (int) $raw['timeout'];
+            }
+        }
+        if ($timeouts === []) {
+            return 20;
+        }
+        $counts = array_count_values($timeouts);
+        arsort($counts);
+        return (int) array_key_first($counts);
+    }
+
     // -- login -----------------------------------------------------------
 
     /**
@@ -470,9 +603,14 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
 
     private function rulesUrl(): string
     {
+        return $this->editorUrl($this->huntgroupId);
+    }
+
+    private function editorUrl(string $huntgroupId): string
+    {
         $base = rtrim($this->baseUrl, '/') . $this->rulesPath;
         $sep = str_contains($base, '?') ? '&' : '?';
-        return $base . $sep . 'huntgroup=' . rawurlencode($this->huntgroupId);
+        return $base . $sep . 'huntgroup=' . rawurlencode($huntgroupId);
     }
 
     /**

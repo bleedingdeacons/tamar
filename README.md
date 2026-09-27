@@ -84,6 +84,7 @@ The hunt group is chosen on **Tamar → Overview**, above the call flow it scope
 |---|---|---|
 | `tamar/register_services` | `ContainerInterface` | After Tamar has bound its services. Use to wrap or decorate the driver (caching layer, audit log, etc.). |
 | `tamar/loaded` | `ContainerInterface` | After Tamar has finished initialising. |
+| `tamar/publish_huntgroup` (filter) | `null`, `string $name`, `ForwardingRule[] $rules` | Called by another plugin to write a whole rota into the hunt group named `$name`. Creates the group if the account has none by that name, replaces every row, copies the greeting, voicemail box, hunting strategy and ring timeout from the configured group, and makes it the configured group. Returns `['id' => …, 'name' => …]`; throws `ForwardingException` on failure. Needs `beacon_manage_forwarding`. Trusted's Forwarding page publishes each week as `Forward Week N` through it. |
 
 ## Capability requirements
 
