@@ -103,20 +103,7 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
 
     public function listRules(): array
     {
-        $state = $this->load();
-        $rules = $this->hydrateRules($state['rules']);
-
-        // Targets are voicemail-shaped; rewrite vm:default → vm:<box> so
-        // the contract's "rule.target_id is a real target.id" holds.
-        $vmBoxId = $this->voicemailBoxId($state);
-        if ($vmBoxId !== '') {
-            foreach ($rules as $i => $rule) {
-                if ($rule->getTargetId() === 'vm:default') {
-                    $rules[$i] = $rule->with(['target_id' => 'vm:' . $vmBoxId]);
-                }
-            }
-        }
-        return $rules;
+        return $this->rulesOf($this->load());
     }
 
     public function findRule(string $ruleId): ?ForwardingRule
@@ -206,6 +193,47 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         );
         self::logInfo('Listed hunt groups', ['count' => count($groups)]);
         return $groups;
+    }
+
+    /**
+     * Read the hunt group called $name without changing anything: its id,
+     * its name and its rules, or null when the account has no group by
+     * that name.
+     *
+     * Only GETs are sent: the hunt-group list, then that group's editor
+     * page. Neither the configured hunt group nor any rota row is
+     * touched, so this is safe to call just to compare what the panel
+     * holds against what it should.
+     *
+     * @return array{id:string,name:string,rules:array<int,ForwardingRule>}|null
+     * @throws ForwardingException
+     */
+    public function findHuntgroup(string $name): ?array
+    {
+        $name = trim($name);
+        if ($name === '') {
+            throw new ForwardingException('A hunt group needs a name.');
+        }
+
+        $id = $this->huntgroupIdNamed($name);
+        if ($id === null) {
+            self::logInfo('No hunt group by that name', ['name' => $name]);
+            return null;
+        }
+
+        $state = $this->fetchAuthenticated(
+            $this->editorUrl($id),
+            'hunt group "' . $name . '"',
+            fn (string $body): array => $this->parser->parse($body),
+        );
+        $rules = $this->rulesOf($state);
+
+        self::logInfo('Read hunt group', [
+            'huntgroup_id' => $id,
+            'name' => $name,
+            'rule_count' => count($rules),
+        ]);
+        return ['id' => $id, 'name' => $name, 'rules' => $rules];
     }
 
     /**
@@ -634,6 +662,30 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         }
         $path = rtrim($path, '/') . '/';
         return rtrim($this->baseUrl, '/') . $path;
+    }
+
+    /**
+     * A parsed hunt-group page's rows as Beacon rules.
+     *
+     * Targets are voicemail-shaped; vm:default is rewritten to vm:<box>
+     * so the contract's "rule.target_id is a real target.id" holds.
+     *
+     * @param array{meta: array<string,mixed>, rules: array<int,array<string,mixed>>, targets: array<int,array<string,mixed>>, csrf: string} $state
+     * @return array<int,ForwardingRule>
+     */
+    private function rulesOf(array $state): array
+    {
+        $rules = $this->hydrateRules($state['rules']);
+
+        $vmBoxId = $this->voicemailBoxId($state);
+        if ($vmBoxId !== '') {
+            foreach ($rules as $i => $rule) {
+                if ($rule->getTargetId() === 'vm:default') {
+                    $rules[$i] = $rule->with(['target_id' => 'vm:' . $vmBoxId]);
+                }
+            }
+        }
+        return $rules;
     }
 
     /**
