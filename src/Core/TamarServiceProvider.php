@@ -117,6 +117,7 @@ final class TamarServiceProvider
                 loginSubmitPath: $settings['login_submit_path'],
                 updatePath: $settings['commit_path'],
                 sessions: new PanelSessionStore(),
+                defaults: \Tamar\Admin\TamarSettings::huntgroupDefaults(),
             );
         });
 

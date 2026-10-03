@@ -12,6 +12,7 @@ use BleedingDeacons\WpMocks\WpState;
 use Psr\Container\ContainerInterface;
 use Tamar\Admin\TamarSettings;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
+use Tamar\Forwarding\HuntgroupDefaults;
 use Tamar\Forwarding\HuntgroupFormBuilder;
 use Tamar\Forwarding\HuntgroupPageParser;
 use Tamar\Forwarding\HuntgroupPublishFilter;
@@ -108,7 +109,7 @@ function publishDecode(string $body): array
     return $out;
 }
 
-function publishService(PublishPanel $panel, string $huntgroupId = '157626'): HuntgroupCallForwardingService
+function publishService(PublishPanel $panel, string $huntgroupId = '157626', ?HuntgroupDefaults $defaults = null): HuntgroupCallForwardingService
 {
     return new HuntgroupCallForwardingService(
         transport: $panel,
@@ -118,6 +119,7 @@ function publishService(PublishPanel $panel, string $huntgroupId = '157626'): Hu
         username: 'demo',
         password: 'pw',
         huntgroupId: $huntgroupId,
+        defaults: $defaults ?? new HuntgroupDefaults(),
     );
 }
 
@@ -178,20 +180,53 @@ it('creates a missing hunt group and writes the rota into it', function () {
     ])->not->toHaveKey('3_destination');
 });
 
-// A new group has no voicemail box, so its voicemail rows would go nowhere.
-it('takes the voicemail box, hunting and ring timeout from the configured group', function () {
+// A new group comes with no voicemail box, so its voicemail rows would go
+// nowhere. The hunt-group settings say which box, by name until one is chosen.
+it('gives the group the default hunt-group settings', function () {
     $panel = new PublishPanel();
 
     publishService($panel)->publishHuntgroup('Forward Week 5', weekRules());
 
     expect(lastUpdate($panel))->toMatchArray([
+        'greeting' => 'none',
+        // The box called "Voice to Email", found by name on the new group's page.
         'voicemail' => '20042',
         'hunting' => 'inorder',
-        // Three of the configured group's four rows ring for 90 seconds.
         '1_timeout' => '90',
         '2_timeout' => '90',
     ]);
 });
+
+it('gives the group the hunt-group settings chosen under Tamar → Settings', function () {
+    $panel = new PublishPanel();
+    $defaults = new HuntgroupDefaults(
+        ringTimeout: 45,
+        greeting: 'dcbc6a61-b256-11eb-8b58-ac281572e7f5',
+        voicemail: 'none',
+        hunting: 'simultaneous',
+    );
+
+    publishService($panel, defaults: $defaults)->publishHuntgroup('Forward Week 5', weekRules());
+
+    expect(lastUpdate($panel))->toMatchArray([
+        'greeting' => 'dcbc6a61-b256-11eb-8b58-ac281572e7f5',
+        'voicemail' => 'none',
+        'hunting' => 'simultaneous',
+        '1_timeout' => '45',
+        '2_timeout' => '45',
+    ]);
+});
+
+it('refuses, before writing, an announcement or voicemail box the panel does not offer', function (HuntgroupDefaults $defaults, string $message) {
+    $panel = new PublishPanel();
+
+    expect(fn () => publishService($panel, defaults: $defaults)->publishHuntgroup('Forward Week 5', weekRules()))
+        ->toThrow(ForwardingException::class, $message);
+    expect(array_column($panel->posts, 'url'))->each->not->toEndWith('/huntgroup/update');
+})->with([
+    'a removed announcement' => [new HuntgroupDefaults(greeting: 'gone'), 'The announcement chosen under Tamar → Settings is no longer in the control panel.'],
+    'a removed voicemail box' => [new HuntgroupDefaults(voicemail: '99999'), 'The voicemail box chosen under Tamar → Settings is no longer in the control panel.'],
+]);
 
 it('overwrites a hunt group that already has the name, rather than making another', function () {
     $panel = new PublishPanel();
@@ -213,12 +248,14 @@ it('replaces every row when publishing into the configured group itself', functi
         ->not->toHaveKey('3_destination');
 });
 
-it('falls back to the panel defaults when no hunt group is configured', function () {
+// The settings, not the configured group, decide: so a fresh install with
+// no group configured still gets a voicemail box.
+it('applies the same settings when no hunt group is configured', function () {
     $panel = new PublishPanel();
 
     publishService($panel, '')->publishHuntgroup('Forward Week 5', weekRules());
 
-    expect(lastUpdate($panel))->toMatchArray(['voicemail' => 'none', '1_timeout' => '20']);
+    expect(lastUpdate($panel))->toMatchArray(['voicemail' => '20042', 'hunting' => 'inorder', '1_timeout' => '90']);
 });
 
 it('refuses when the created group never shows up in the list', function () {

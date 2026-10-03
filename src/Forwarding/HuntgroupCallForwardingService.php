@@ -96,6 +96,7 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         private readonly string $loginSubmitPath = '/phonedivert/login.php',
         private readonly string $updatePath = '/phonedivert/huntgroup/update',
         private readonly ?PanelSessionStore $sessions = null,
+        private readonly HuntgroupDefaults $defaults = new HuntgroupDefaults(),
     ) {
     }
 
@@ -245,12 +246,15 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
      * already exists is reused, so publishing the same week twice
      * overwrites its rows instead of making a second group.
      *
-     * Every row of the target group is replaced. A new group comes with
-     * the panel's defaults — no voicemail box, among them — so the
-     * greeting, voicemail box and hunting strategy are taken from the
-     * configured hunt group, when there is one, as is the ring timeout
-     * for each row. Rules are written in priority order and their ids
-     * are ignored.
+     * Every row of the target group is replaced. The announcement,
+     * voicemail box and hunting type, and the ring timeout on every row,
+     * come from the hunt-group settings under Tamar → Settings
+     * ({@see HuntgroupDefaults}), so every week's group is set up the
+     * same way whatever group Tamar was showing before. A new group
+     * comes with the panel's own defaults, which have no voicemail box.
+     * An announcement or voicemail box the panel does not offer is
+     * refused before anything is written. Rules are written in priority
+     * order and their ids are ignored.
      *
      * @param ForwardingRule[] $rules
      * @throws ForwardingException
@@ -264,8 +268,6 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
         foreach ($rules as $rule) {
             $this->validateRule($rule);
         }
-
-        $template = $this->huntgroupId !== '' ? $this->load() : ['meta' => [], 'rules' => []];
 
         $id = $this->huntgroupIdNamed($name);
         if ($id === null) {
@@ -284,22 +286,16 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
             fn (string $body): array => $this->parser->parse($body),
         );
 
-        $templateMeta = $template['meta'];
+        $state['meta'] = $this->defaults->applyTo($state['meta']);
         $state['meta']['name'] = $name;
         $state['meta']['huntgroup_id'] = $id;
-        foreach (['greeting', 'voicemail', 'hunting'] as $field) {
-            if (isset($templateMeta[$field])) {
-                $state['meta'][$field] = $templateMeta[$field];
-            }
-        }
 
         usort($rules, static fn (ForwardingRule $a, ForwardingRule $b): int
             => $a->getPriority() <=> $b->getPriority());
-        $timeout = $this->commonTimeout($template);
         $state['rules'] = [];
         foreach ($rules as $rule) {
             $row = $this->ruleToRow($rule->with(['id' => '']), $state);
-            $row['_raw']['timeout'] = $timeout;
+            $row['_raw']['timeout'] = $this->defaults->ringTimeout;
             $state['rules'][] = $row;
         }
 
@@ -347,26 +343,49 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
     }
 
     /**
-     * The ring timeout the configured group's rows use most, or the
-     * panel's default of 20 seconds when it has none.
+     * The announcements and voicemail boxes the panel offers, as
+     * `{id, label}` lists, for the settings page's dropdowns. Every
+     * hunt-group page lists all of them, so this reads the configured
+     * group's page, or the account's first group when none is
+     * configured. Read only.
      *
-     * @param array<string,mixed> $state
+     * @return array{greetings: list<array{id:string,label:string}>, voicemails: list<array{id:string,label:string}>}
+     * @throws ForwardingException
      */
-    private function commonTimeout(array $state): int
+    public function panelOptions(): array
     {
-        $timeouts = [];
-        foreach (($state['rules'] ?? []) as $row) {
-            $raw = is_array($row) && is_array($row['_raw'] ?? null) ? $row['_raw'] : [];
-            if (isset($raw['timeout'])) {
-                $timeouts[] = (int) $raw['timeout'];
+        if ($this->huntgroupId !== '') {
+            $meta = $this->load()['meta'];
+        } else {
+            $groups = $this->listHuntgroups();
+            if ($groups === []) {
+                return ['greetings' => [], 'voicemails' => []];
+            }
+            $meta = $this->fetchAuthenticated(
+                $this->editorUrl($groups[0]['id']),
+                'hunt group "' . $groups[0]['name'] . '"',
+                fn (string $body): array => $this->parser->parse($body),
+            )['meta'];
+        }
+
+        return [
+            'greetings' => self::optionList($meta['greetings_available'] ?? []),
+            'voicemails' => self::optionList($meta['voicemails_available'] ?? []),
+        ];
+    }
+
+    /**
+     * @return list<array{id:string,label:string}>
+     */
+    private static function optionList(mixed $options): array
+    {
+        $out = [];
+        foreach (is_array($options) ? $options : [] as $option) {
+            if (is_array($option) && isset($option['id'])) {
+                $out[] = ['id' => (string) $option['id'], 'label' => (string) ($option['label'] ?? $option['id'])];
             }
         }
-        if ($timeouts === []) {
-            return 20;
-        }
-        $counts = array_count_values($timeouts);
-        arsort($counts);
-        return (int) array_key_first($counts);
+        return $out;
     }
 
     // -- login -----------------------------------------------------------
