@@ -73,7 +73,20 @@ The top-level **Tamar** menu in the WordPress admin (**Tamar → Settings**):
 | Update path | POST endpoint that saves the rota. Default `/phonedivert/huntgroup/update`. |
 | Office number | The office's telephone number. Default `0117 946 0754`; digits, spaces and a leading `+` are kept, and an empty value goes back to the default. Read it with `TamarSettings::load()['office_number']`. |
 | Verify TLS certificate | Default on. Disable only for self-signed dev hosts. |
-| Timeout | Per-request HTTP timeout in seconds. |
+| Timeout | Per-request HTTP timeout in seconds, for talking to the control panel. Not the ring timeout below. |
+
+### Hunt group settings
+
+Given to every hunt group Tamar writes from a rota, which is what Trusted's **Publish** and **Sync to Tamar** do through `tamar/publish_huntgroup`. Other hunt groups, including ones edited on the Overview, are not changed.
+
+| Field | Default | Notes |
+|---|---|---|
+| Ring timeout | `90` | Seconds each row rings before the next is tried, 5–180. Written on every row. Stored as `ring_timeout`. |
+| Announcement | None | Played to the caller first. The dropdown lists the panel's announcements once Tamar can reach it. |
+| Voicemail | Voice to Email | Where a voicemail row (an unfilled shift) forwards. Until a box is chosen it is found **by name** on the page being written, because the panel's box number is only known once a page has been read. |
+| Hunting type | Hunt in-order | The panel's hunting strategy. A rota needs in-order: each row covers its own time. |
+
+An announcement or voicemail box the panel no longer offers is refused before anything is written, rather than leaving voicemail rows with no box. The dropdowns are read live from the configured hunt group's page, or from the account's first group when none is configured. A saved value the panel no longer lists stays selected, so saving cannot lose it. Read them with `TamarSettings::huntgroupDefaults()`.
 
 ### Hunt group
 
@@ -85,7 +98,7 @@ The hunt group is chosen on **Tamar → Overview**, above the call flow it scope
 |---|---|---|
 | `tamar/register_services` | `ContainerInterface` | After Tamar has bound its services. Use to wrap or decorate the driver (caching layer, audit log, etc.). |
 | `tamar/loaded` | `ContainerInterface` | After Tamar has finished initialising. |
-| `tamar/publish_huntgroup` (filter) | `null`, `string $name`, `ForwardingRule[] $rules` | Called by another plugin to write a whole rota into the hunt group named `$name`. Creates the group if the account has none by that name, replaces every row, copies the greeting, voicemail box, hunting strategy and ring timeout from the configured group, and makes it the configured group. Returns `['id' => …, 'name' => …]`; throws `ForwardingException` on failure. Needs `beacon_manage_forwarding`. Trusted's Forwarding page publishes each week as `Forward Week N` through it. |
+| `tamar/publish_huntgroup` (filter) | `null`, `string $name`, `ForwardingRule[] $rules` | Called by another plugin to write a whole rota into the hunt group named `$name`. Creates the group if the account has none by that name, replaces every row, applies the hunt group settings (ring timeout, announcement, voicemail box, hunting type), and makes it the configured group. Returns `['id' => …, 'name' => …]`; throws `ForwardingException` on failure. Needs `beacon_manage_forwarding`. Trusted's Forwarding page publishes each week as `Forward Week N` through it. |
 | `tamar/find_huntgroup` (filter) | `null`, `string $name` | Called by another plugin to read the hunt group named `$name` without changing anything: only GETs go to the panel, and the configured group is left alone. Returns `['id' => …, 'name' => …, 'rules' => ForwardingRule[]]`, or `null` when the account has no group by that name; throws `ForwardingException` when the panel cannot be read, so that is never mistaken for a missing group. Needs `beacon_view_forwarding`. Trusted's Rota Calendar checks the current week's `Forward Week N` through it. |
 
 ## Capability requirements

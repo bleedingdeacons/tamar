@@ -8,6 +8,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+use Tamar\Forwarding\HuntgroupDefaults;
+
 /**
  * Read/write access to Tamar's settings row.
  *
@@ -54,7 +56,11 @@ final class TamarSettings
      *   huntgroup_id:string,
      *   office_number:string,
      *   verify_tls:bool,
-     *   timeout:int
+     *   timeout:int,
+     *   ring_timeout:int,
+     *   greeting:string,
+     *   voicemail:string,
+     *   hunting:string
      * }
      */
     public static function load(): array
@@ -79,7 +85,31 @@ final class TamarSettings
             'office_number' => (string) ($raw['office_number'] ?? self::DEFAULT_OFFICE_NUMBER),
             'verify_tls' => (bool) ($raw['verify_tls'] ?? true),
             'timeout' => max(1, (int) ($raw['timeout'] ?? 15)),
+            // The hunt-group settings: given to every hunt group written
+            // from a rota. `timeout` above is the HTTP timeout for
+            // talking to the panel; `ring_timeout` is how long each row
+            // rings. An empty voicemail means the box called
+            // "Voice to Email" — see HuntgroupDefaults.
+            'ring_timeout' => self::sanitiseRingTimeout($raw['ring_timeout'] ?? HuntgroupDefaults::DEFAULT_RING_TIMEOUT),
+            'greeting' => self::sanitiseOption((string) ($raw['greeting'] ?? HuntgroupDefaults::NONE), HuntgroupDefaults::NONE),
+            'voicemail' => self::sanitiseOption((string) ($raw['voicemail'] ?? ''), ''),
+            'hunting' => self::sanitiseHunting((string) ($raw['hunting'] ?? HuntgroupDefaults::DEFAULT_HUNTING)),
         ];
+    }
+
+    /**
+     * The hunt-group settings as the driver applies them.
+     */
+    public static function huntgroupDefaults(): HuntgroupDefaults
+    {
+        $settings = self::load();
+
+        return new HuntgroupDefaults(
+            ringTimeout: $settings['ring_timeout'],
+            greeting: $settings['greeting'],
+            voicemail: $settings['voicemail'],
+            hunting: $settings['hunting'],
+        );
     }
 
     /**
@@ -112,6 +142,10 @@ final class TamarSettings
             'office_number' => self::sanitiseOfficeNumber((string) ($input['office_number'] ?? $existing['office_number'])),
             'verify_tls' => !empty($input['verify_tls']),
             'timeout' => max(1, min(120, (int) ($input['timeout'] ?? $existing['timeout']))),
+            'ring_timeout' => self::sanitiseRingTimeout($input['ring_timeout'] ?? $existing['ring_timeout']),
+            'greeting' => self::sanitiseOption((string) ($input['greeting'] ?? $existing['greeting']), HuntgroupDefaults::NONE),
+            'voicemail' => self::sanitiseOption((string) ($input['voicemail'] ?? $existing['voicemail']), ''),
+            'hunting' => self::sanitiseHunting((string) ($input['hunting'] ?? $existing['hunting'])),
         ];
 
         update_option(TAMAR_OPTION_KEY, $next);
@@ -134,6 +168,32 @@ final class TamarSettings
         $settings['huntgroup_id'] = self::sanitiseHuntgroupId($raw);
 
         update_option(TAMAR_OPTION_KEY, $settings);
+    }
+
+    /**
+     * Seconds each row rings, within what the panel's own field accepts.
+     */
+    private static function sanitiseRingTimeout(mixed $raw): int
+    {
+        $seconds = is_numeric($raw) ? (int) $raw : HuntgroupDefaults::DEFAULT_RING_TIMEOUT;
+
+        return max(HuntgroupDefaults::MIN_RING_TIMEOUT, min(HuntgroupDefaults::MAX_RING_TIMEOUT, $seconds));
+    }
+
+    /**
+     * A panel option value — "none", a box number or a UUID. Anything
+     * else is dropped, leaving $empty.
+     */
+    private static function sanitiseOption(string $raw, string $empty): string
+    {
+        $value = trim($raw);
+
+        return preg_match('/^[A-Za-z0-9-]{1,64}$/', $value) === 1 ? $value : $empty;
+    }
+
+    private static function sanitiseHunting(string $raw): string
+    {
+        return array_key_exists($raw, HuntgroupDefaults::HUNTING_TYPES) ? $raw : HuntgroupDefaults::DEFAULT_HUNTING;
     }
 
     /**

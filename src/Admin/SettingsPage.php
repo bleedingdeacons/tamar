@@ -12,6 +12,7 @@ use Psr\Container\ContainerInterface;
 use Beacon\Forwarding\Interfaces\CallForwardingService;
 use Beacon\Forwarding\Interfaces\ForwardingException;
 use Tamar\Forwarding\HuntgroupCallForwardingService;
+use Tamar\Forwarding\HuntgroupDefaults;
 
 /**
  * Tamar's admin settings page.
@@ -226,9 +227,12 @@ final class SettingsPage
         echo '<td><label><input id="tamar-verify-tls" name="verify_tls" type="checkbox" value="1"' . checked($settings['verify_tls'], true, false) . $disabled . '> ' . esc_html__('Recommended on; disable only for development against a self-signed certificate.', 'tamar') . '</label></td></tr>';
 
         echo '<tr><th><label for="tamar-timeout">' . esc_html__('Timeout (seconds)', 'tamar') . '</label></th>';
-        echo '<td><input id="tamar-timeout" name="timeout" type="number" min="1" max="120" value="' . esc_attr((string) $settings['timeout']) . '"' . $disabled . '></td></tr>';
+        echo '<td><input id="tamar-timeout" name="timeout" type="number" min="1" max="120" value="' . esc_attr((string) $settings['timeout']) . '"' . $disabled . '>';
+        echo '<p class="description">' . esc_html__('How long to wait for the control panel to answer.', 'tamar') . '</p></td></tr>';
 
         echo '</tbody></table>';
+
+        $this->renderHuntgroupDefaults($settings, $disabled);
 
         // Both buttons live inside the settings form so the values
         // currently in the fields are POSTed (and saved) before we act.
@@ -241,6 +245,153 @@ final class SettingsPage
             echo '</p>';
         }
         echo '</form>';
+    }
+
+    /**
+     * The settings given to every hunt group Tamar writes from a rota:
+     * ring timeout, announcement, voicemail box and hunting type. Part of
+     * the settings form, so one Save covers both.
+     *
+     * The announcement and voicemail dropdowns list what the control
+     * panel offers, read live. Until Tamar can reach the panel they offer
+     * only the defaults and whatever is already saved, so a save cannot
+     * lose a value it cannot show.
+     *
+     * @param array<string, mixed> $settings
+     */
+    private function renderHuntgroupDefaults(array $settings, string $disabled): void
+    {
+        $options = $this->fetchPanelOptions();
+
+        echo '<h2>' . esc_html__('Hunt group settings', 'tamar') . '</h2>';
+        echo '<p class="description">' . esc_html__('Given to every hunt group Tamar writes from a rota — Trusted\'s Publish and Sync to Tamar. Other hunt groups are not changed.', 'tamar') . '</p>';
+        if ($options === null) {
+            echo '<p class="description">' . esc_html__('Once Tamar can reach the control panel, the announcements and voicemail boxes it offers are listed here.', 'tamar') . '</p>';
+        }
+
+        echo '<table class="form-table"><tbody>';
+
+        echo '<tr><th><label for="tamar-ring-timeout">' . esc_html__('Ring timeout (seconds)', 'tamar') . '</label></th>';
+        echo '<td><input id="tamar-ring-timeout" name="ring_timeout" type="number"'
+            . ' min="' . esc_attr((string) HuntgroupDefaults::MIN_RING_TIMEOUT) . '"'
+            . ' max="' . esc_attr((string) HuntgroupDefaults::MAX_RING_TIMEOUT) . '"'
+            . ' value="' . esc_attr((string) $settings['ring_timeout']) . '"' . $disabled . '>';
+        echo '<p class="description">' . esc_html(sprintf(
+            /* translators: %d: the default ring timeout in seconds. */
+            __('How long each row rings before the next is tried. Default %d.', 'tamar'),
+            HuntgroupDefaults::DEFAULT_RING_TIMEOUT
+        )) . '</p></td></tr>';
+
+        $greetings = $options['greetings'] ?? [];
+        if ($greetings === []) {
+            $greetings = [['id' => HuntgroupDefaults::NONE, 'label' => __('None', 'tamar')]];
+        }
+        echo '<tr><th><label for="tamar-greeting">' . esc_html__('Announcement', 'tamar') . '</label></th><td>';
+        $this->renderOptionSelect('tamar-greeting', 'greeting', $greetings, (string) $settings['greeting'], $disabled);
+        echo '<p class="description">' . esc_html__('Played to the caller before the call is forwarded. Default None.', 'tamar') . '</p></td></tr>';
+
+        $voicemails = $options['voicemails'] ?? [];
+        $current = (string) $settings['voicemail'];
+        if ($current === '') {
+            // Not chosen yet: the box called "Voice to Email". Select it
+            // by name when the panel lists it; otherwise offer the name
+            // itself, stored as '' so publishing looks it up.
+            $match = null;
+            foreach ($voicemails as $box) {
+                if (strcasecmp(trim($box['label']), HuntgroupDefaults::DEFAULT_VOICEMAIL_NAME) === 0) {
+                    $match = $box['id'];
+                    break;
+                }
+            }
+            if ($match !== null) {
+                $current = $match;
+            } else {
+                array_unshift($voicemails, ['id' => '', 'label' => $options === null
+                    ? HuntgroupDefaults::DEFAULT_VOICEMAIL_NAME
+                    : sprintf(
+                        /* translators: %s: the default voicemail box's name. */
+                        __('%s (not in the control panel)', 'tamar'),
+                        HuntgroupDefaults::DEFAULT_VOICEMAIL_NAME
+                    )]);
+            }
+        }
+        if ($options === null && !in_array(HuntgroupDefaults::NONE, array_column($voicemails, 'id'), true)) {
+            $voicemails[] = ['id' => HuntgroupDefaults::NONE, 'label' => __('None', 'tamar')];
+        }
+        echo '<tr><th><label for="tamar-voicemail">' . esc_html__('Voicemail', 'tamar') . '</label></th><td>';
+        $this->renderOptionSelect('tamar-voicemail', 'voicemail', $voicemails, $current, $disabled);
+        echo '<p class="description">' . esc_html(sprintf(
+            /* translators: %s: the default voicemail box's name. */
+            __('Where an unfilled shift forwards. Default %s.', 'tamar'),
+            HuntgroupDefaults::DEFAULT_VOICEMAIL_NAME
+        )) . '</p></td></tr>';
+
+        $hunting = [];
+        foreach (HuntgroupDefaults::HUNTING_TYPES as $value => $label) {
+            $hunting[] = ['id' => $value, 'label' => $label];
+        }
+        echo '<tr><th><label for="tamar-hunting">' . esc_html__('Hunting type', 'tamar') . '</label></th><td>';
+        $this->renderOptionSelect('tamar-hunting', 'hunting', $hunting, (string) $settings['hunting'], $disabled);
+        echo '<p class="description">' . esc_html__('How the rows are tried. Default Hunt in-order, which a rota needs: each row covers its own time.', 'tamar') . '</p></td></tr>';
+
+        echo '</tbody></table>';
+    }
+
+    /**
+     * A select of panel options. A saved value missing from them is kept
+     * as an extra, selected option, so saving cannot silently replace it.
+     *
+     * @param list<array{id:string,label:string}> $options
+     */
+    private function renderOptionSelect(string $id, string $name, array $options, string $current, string $disabled): void
+    {
+        echo '<select id="' . esc_attr($id) . '" name="' . esc_attr($name) . '"' . $disabled . '>';
+        $found = false;
+        foreach ($options as $option) {
+            $isSelected = $option['id'] === $current;
+            $found = $found || $isSelected;
+            echo '<option value="' . esc_attr($option['id']) . '"' . selected($isSelected, true, false) . '>'
+                . esc_html(trim($option['label']) !== '' ? trim($option['label']) : $option['id'])
+                . '</option>';
+        }
+        if (!$found && $current !== '') {
+            echo '<option value="' . esc_attr($current) . '" selected>'
+                . esc_html(sprintf(/* translators: %s: a control-panel option value. */ __('Saved value %s (not in the control panel)', 'tamar'), $current))
+                . '</option>';
+        }
+        echo '</select>';
+    }
+
+    /**
+     * The panel's announcements and voicemail boxes, or null when they
+     * cannot be read: no credentials yet, a panel that will not answer,
+     * or a driver other than Tamar's. Best-effort, like the Overview's
+     * hunt-group list.
+     *
+     * @return array{greetings: list<array{id:string,label:string}>, voicemails: list<array{id:string,label:string}>}|null
+     */
+    private function fetchPanelOptions(): ?array
+    {
+        $settings = TamarSettings::load();
+        if ($settings['base_url'] === '' || $settings['username'] === '' || TamarSettings::password() === '') {
+            return null;
+        }
+        if (!$this->container->has(CallForwardingService::class)) {
+            return null;
+        }
+        $service = $this->container->get(CallForwardingService::class);
+        if (!$service instanceof HuntgroupCallForwardingService) {
+            return null;
+        }
+
+        try {
+            $options = $service->panelOptions();
+        } catch (\Throwable $e) {
+            self::logWarning('Could not load the panel\'s announcements and voicemail boxes', ['error' => $e->getMessage()]);
+            return null;
+        }
+
+        return $options['greetings'] === [] && $options['voicemails'] === [] ? null : $options;
     }
 
     private function renderStatePanel(): void
