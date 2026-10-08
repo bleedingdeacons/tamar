@@ -8,16 +8,16 @@
     "packages": [
         {
             "name": "bleedingdeacons/beacon",
-            "version": "v3.0.0",
+            "version": "v3.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bleedingdeacons/beacon.git",
-                "reference": "6fd6138f74dd4005a2d265fa125060cd943038bf"
+                "reference": "0cf2c8d790a2a7ff6de803e6ecf3826a89a109e0"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bleedingdeacons/beacon/zipball/6fd6138f74dd4005a2d265fa125060cd943038bf",
-                "reference": "6fd6138f74dd4005a2d265fa125060cd943038bf",
+                "url": "https://api.github.com/repos/bleedingdeacons/beacon/zipball/0cf2c8d790a2a7ff6de803e6ecf3826a89a109e0",
+                "reference": "0cf2c8d790a2a7ff6de803e6ecf3826a89a109e0",
                 "shasum": ""
             },
             "require": {
@@ -88,10 +88,10 @@
             ],
             "description": "Call-forwarding contracts, models, HTTP transport, capabilities and REST controller, shared by Tamar and Trusted. A Composer library, not a WordPress plugin.",
             "support": {
-                "source": "https://github.com/bleedingdeacons/beacon/tree/v3.0.0",
+                "source": "https://github.com/bleedingdeacons/beacon/tree/v3.0.1",
                 "issues": "https://github.com/bleedingdeacons/beacon/issues"
             },
-            "time": "2026-09-22T21:13:18+00:00"
+            "time": "2026-10-08T22:40:01+00:00"
         },
         {
             "name": "psr/container",
