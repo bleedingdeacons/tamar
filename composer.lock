@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "05c9d1fae2d3acb80c92bb4879768627",
+    "content-hash": "3783d19a49e28bab85041196138c62a0",
     "packages": [
         {
             "name": "bleedingdeacons/beacon",
-            "version": "v3.0.1",
+            "version": "v1.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bleedingdeacons/beacon.git",
-                "reference": "0cf2c8d790a2a7ff6de803e6ecf3826a89a109e0"
+                "reference": "c5e3d99a627ce2cfae960636ed69bfbd907477d4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bleedingdeacons/beacon/zipball/0cf2c8d790a2a7ff6de803e6ecf3826a89a109e0",
-                "reference": "0cf2c8d790a2a7ff6de803e6ecf3826a89a109e0",
+                "url": "https://api.github.com/repos/bleedingdeacons/beacon/zipball/c5e3d99a627ce2cfae960636ed69bfbd907477d4",
+                "reference": "c5e3d99a627ce2cfae960636ed69bfbd907477d4",
                 "shasum": ""
             },
             "require": {
@@ -88,10 +88,10 @@
             ],
             "description": "Call-forwarding contracts, models, HTTP transport, capabilities and REST controller, shared by Tamar and Trusted. A Composer library, not a WordPress plugin.",
             "support": {
-                "source": "https://github.com/bleedingdeacons/beacon/tree/v3.0.1",
+                "source": "https://github.com/bleedingdeacons/beacon/tree/v1.0.1",
                 "issues": "https://github.com/bleedingdeacons/beacon/issues"
             },
-            "time": "2026-10-08T22:40:01+00:00"
+            "time": "2026-10-09T00:10:13+00:00"
         },
         {
             "name": "psr/container",
