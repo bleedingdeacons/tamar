@@ -21,7 +21,7 @@ Tamar (plugins_loaded) ──bind──▶ Beacon\Forwarding\ForwardingRegistry 
 - **Tamar** wires a `HuntgroupCallForwardingService` into its own container on `plugins_loaded` and publishes it with `ForwardingRegistry::bind()`. Trusted calls `ForwardingRegistry::get()` when it needs a driver.
 - **Tamar owns what the Beacon plugin used to**: it registers the `beacon_*` roles on activation, removes them on deactivation and uninstall, re-registers them if they go missing, and registers the `beacon/v1` REST routes when `BEACON_ENABLE_REST` is defined in `wp-config.php`.
 
-Until Beacon v3.0.0, Beacon was a plugin that had to be active alongside Tamar, and Tamar bound its driver on the `beacon/loaded` action.
+Until 2026-09-22 (Beacon v3.0.0, since renumbered to v1), Beacon was a plugin that had to be active alongside Tamar, and Tamar bound its driver on the `beacon/loaded` action.
 
 ## How the integration works
 

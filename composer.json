@@ -24,7 +24,7 @@
         "ext-openssl": "*",
         "ext-dom": "*",
         "ext-libxml": "*",
-        "bleedingdeacons/beacon": "^3.0",
+        "bleedingdeacons/beacon": "^1.0",
         "psr/container": "^2.0"
     },
     "require-dev": {
