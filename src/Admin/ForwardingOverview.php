@@ -15,8 +15,7 @@ use Beacon\Targets\Models\ForwardingTarget;
  * Read-only "current forwarding setup" view, laid out like the panel's
  * own hunt-group page (/phonedivert/huntgroup?huntgroup=<id>).
  *
- * The page is one card: the group's Name, Announcement, Voicemail and
- * Hunting type across the top, then an "Existing configuration" table
+ * It shows that page's "Current configuration" section only: a table
  * with a row per rota line — order, Su–Sa, start and end time, VM, the
  * number calls divert to, a comment, the ring timeout and whether the
  * line is active. Above the rows sits a notice when an announcement
@@ -26,14 +25,14 @@ use Beacon\Targets\Models\ForwardingTarget;
  *
  * The rows are built from the Beacon CallForwardingService contract
  * only — the ForwardingRule getters and the targets from listTargets().
- * The group's settings and the timeouts are not in the contract, so
- * they come in as an optional $huntgroup summary (Tamar's driver
- * supplies it, see HuntgroupCallForwardingService::huntgroupSummary()).
- * Without one, the settings row and both notices are left out and each
- * timeout shows as "—", so a sibling plugin that swaps the bound driver
- * still gets a working table.
+ * Whether the group plays an announcement or has a voicemail box, and
+ * the timeouts, are not in the contract, so they come in as an optional
+ * $huntgroup summary (Tamar's driver supplies it, see
+ * HuntgroupCallForwardingService::huntgroupSummary()). Without one, both
+ * notices are left out and each timeout shows as "—", so a sibling
+ * plugin that swaps the bound driver still gets a working table.
  *
- * @phpstan-type HuntgroupSummary array{name: string, greeting: string, voicemail: string, hunting: string, timeouts: array<string, int>}
+ * @phpstan-type HuntgroupSummary array{greeting: string, voicemail: string, timeouts: array<string, int>}
  */
 final class ForwardingOverview
 {
@@ -43,8 +42,8 @@ final class ForwardingOverview
     /**
      * @param ForwardingRule[]      $rules     From CallForwardingService::listRules()
      * @param ForwardingTarget[]    $targets   From CallForwardingService::listTargets()
-     * @param HuntgroupSummary|null $huntgroup The group's settings and timeouts, when the
-     *                                         driver can say.
+     * @param HuntgroupSummary|null $huntgroup The group's announcement, voicemail and
+     *                                         timeouts, when the driver can say.
      */
     public function render(array $rules, array $targets, ?array $huntgroup = null): void
     {
@@ -61,20 +60,8 @@ final class ForwardingOverview
         echo '<div class="tamar-overview">';
         $this->styles();
 
-        echo '<fieldset class="tamar-card">';
-        $name = $huntgroup['name'] ?? '';
-        echo '<legend class="tamar-card__legend">'
-            . esc_html($name !== ''
-                /* translators: %s: hunt group name */
-                ? sprintf(__('Hunt Group %s', 'tamar'), $name)
-                : __('Hunt Group', 'tamar'))
-            . '</legend>';
-
-        if ($huntgroup !== null) {
-            $this->renderSettings($huntgroup);
-        }
-
-        echo '<h5 class="tamar-card__title">' . esc_html__('Existing configuration', 'tamar') . '</h5>';
+        echo '<div class="tamar-card">';
+        echo '<h5 class="tamar-card__title">' . esc_html__('Current configuration', 'tamar') . '</h5>';
 
         if ($rules === []) {
             echo '<p class="tamar-empty">'
@@ -84,27 +71,7 @@ final class ForwardingOverview
             $this->renderTable($rules, $targetsById, $huntgroup);
         }
 
-        echo '</fieldset>';
         echo '</div>';
-    }
-
-    /** @param HuntgroupSummary $huntgroup */
-    private function renderSettings(array $huntgroup): void
-    {
-        $fields = [
-            __('Name', 'tamar') => $huntgroup['name'],
-            __('Announcement', 'tamar') => $huntgroup['greeting'] !== '' ? $huntgroup['greeting'] : __('None', 'tamar'),
-            __('Voicemail', 'tamar') => $huntgroup['voicemail'] !== '' ? $huntgroup['voicemail'] : __('None', 'tamar'),
-            __('Hunting type', 'tamar') => $huntgroup['hunting'],
-        ];
-
-        echo '<div class="tamar-settings">';
-        foreach ($fields as $label => $value) {
-            echo '<div class="tamar-settings__field">';
-            echo '<p>' . esc_html($label) . '</p>';
-            echo $this->pill($value);
-            echo '</div>';
-        }
         echo '</div>';
     }
 
@@ -319,12 +286,7 @@ final class ForwardingOverview
         echo '<style>
 .tamar-overview{--tamar-ink:#212529;--tamar-purple:#382e62;--tamar-line:#dee2e6;--tamar-input:#ced4da;color:var(--tamar-ink);}
 .tamar-card{background:#fff;border:1px solid #d9dbe6;border-radius:10px;padding:24px;margin:20px 0;font-size:14px;line-height:1.5;}
-.tamar-card__legend{float:left;width:100%;padding:0;margin:0 0 8px;font-size:18px;font-weight:700;color:#888;}
-.tamar-card__legend+*{clear:left;}
-.tamar-card__title{font-size:20px;font-weight:500;color:var(--tamar-purple);margin:32px 0 16px;}
-.tamar-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 24px;}
-.tamar-settings__field p{font-size:15px;margin:0 0 8px;}
-.tamar-settings .tamar-pill{display:block;}
+.tamar-card__title{font-size:20px;font-weight:500;color:var(--tamar-purple);margin:0 0 16px;}
 .tamar-pill{display:inline-block;box-sizing:border-box;min-height:36px;padding:6px 12px;border:1px solid var(--tamar-input);border-radius:20px;background:#fff;font-size:15px;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tamar-pill--empty{color:#8c9196;}
 .tamar-pill--time{min-width:72px;text-align:center;font-variant-numeric:tabular-nums;}
@@ -346,7 +308,6 @@ final class ForwardingOverview
 .tamar-notice--info td{background:#cfe2ff;color:#084298;border-bottom-color:#b6d4fe;}
 .tamar-notice--warning td{background:#fff3cd;color:#664d03;border-bottom-color:#ffecb5;}
 .tamar-empty{color:#646970;}
-.tamar-card--chooser .tamar-card__title{margin-top:0;}
 .tamar-card--chooser p{margin:0 0 8px;}
 .tamar-card--chooser select,.tamar-card--chooser input[type=text]{border-radius:20px;border-color:var(--tamar-input);padding:4px 32px 4px 12px;min-width:240px;}
 </style>';

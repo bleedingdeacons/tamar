@@ -90,7 +90,7 @@ An announcement or voicemail box the panel no longer offers is refused before an
 
 ### Hunt group
 
-The hunt group is chosen on **Tamar → Overview**, above the call flow it scopes. Once the credentials above are saved and Tamar can log in, it is a dropdown of the account's hunt groups by name; until then it takes the numeric ID from the upstream edit URL — e.g. `157626` from `.../huntgroup?huntgroup=157626`. Without it Tamar can't tell which hunt group on the account to edit. **Refresh** reloads both the list and the call flow from the panel.
+The hunt group is chosen on **Tamar → Overview**, above the configuration it scopes. Once the credentials above are saved and Tamar can log in, it is a dropdown of the account's hunt groups by name; until then it takes the numeric ID from the upstream edit URL — e.g. `157626` from `.../huntgroup?huntgroup=157626`. Without it Tamar can't tell which hunt group on the account to edit. **Refresh** reloads both the list and the configuration from the panel.
 
 ## Hooks
 
@@ -107,7 +107,7 @@ The hunt group is chosen on **Tamar → Overview**, above the call flow it scope
 |---|---|
 | `beacon_view_forwarding` | Required to see the settings page. |
 | `beacon_manage_forwarding` | Required to save settings and to change the hunt group. |
-| `beacon_push_config` | Required to use the "Apply pending changes" button. (Tamar's commit is a no-op, but the capability still gates the button.) |
+| `beacon_push_config` | Not used by Tamar's screens. It gated an "Apply pending changes" button, removed because Tamar's commit is a no-op; the role still grants it for Beacon's REST API. |
 
 ## File layout
 
