@@ -26,7 +26,7 @@ function overviewRule(string $label, int $priority, array $days, string $from, s
 /**
  * @param ForwardingRule[]   $rules
  * @param ForwardingTarget[] $targets
- * @param array{name: string, greeting: string, voicemail: string, hunting: string, timeouts: array<string, int>}|null $huntgroup
+ * @param array{greeting: string, voicemail: string, timeouts: array<string, int>}|null $huntgroup
  */
 function renderOverview(array $rules, array $targets = [], ?array $huntgroup = null): string
 {
@@ -37,11 +37,11 @@ function renderOverview(array $rules, array $targets = [], ?array $huntgroup = n
 
 /**
  * @param array<string, int> $timeouts
- * @return array{name: string, greeting: string, voicemail: string, hunting: string, timeouts: array<string, int>}
+ * @return array{greeting: string, voicemail: string, timeouts: array<string, int>}
  */
 function overviewSummary(string $greeting = '', string $voicemail = '', array $timeouts = []): array
 {
-    return ['name' => 'New Rota', 'greeting' => $greeting, 'voicemail' => $voicemail, 'hunting' => 'Hunt in-order', 'timeouts' => $timeouts];
+    return ['greeting' => $greeting, 'voicemail' => $voicemail, 'timeouts' => $timeouts];
 }
 
 /**
@@ -146,13 +146,12 @@ it('falls back to the raw target id when the target is unknown', function () {
     expect(overviewRows($html)[0][11])->toBe('num:1');
 });
 
-it('shows the group settings across the top', function () {
+it('shows only the Current configuration section', function () {
     $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')], [], overviewSummary(voicemail: 'Voice to Email'));
 
-    expect($html)->toContain('<legend class="tamar-card__legend">Hunt Group New Rota</legend>')
-        ->and($html)->toContain('<p>Announcement</p><span class="tamar-pill">None</span>')
-        ->and($html)->toContain('<p>Voicemail</p><span class="tamar-pill">Voice to Email</span>')
-        ->and($html)->toContain('<p>Hunting type</p><span class="tamar-pill">Hunt in-order</span>');
+    expect($html)->toContain('<h5 class="tamar-card__title">Current configuration</h5>')
+        ->and($html)->not->toContain('Hunting type')
+        ->and($html)->not->toContain('<legend');
 });
 
 it('puts the announcement notice above the rows and the voicemail notice below', function () {
@@ -176,9 +175,7 @@ it('leaves out both notices when there is no announcement or voicemail', functio
 it('still renders the table without a summary, for a driver that cannot give one', function () {
     $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')]);
 
-    expect($html)->not->toContain('tamar-settings')
-        ->and($html)->not->toContain('tamar-notice')
-        ->and($html)->toContain('<legend class="tamar-card__legend">Hunt Group</legend>')
+    expect($html)->not->toContain('tamar-notice')
         ->and(overviewRows($html)[0][13])->toBe('—');
 });
 

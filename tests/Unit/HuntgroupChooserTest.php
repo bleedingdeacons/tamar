@@ -12,7 +12,7 @@ use Tamar\Admin\TamarSettings;
 use Tamar\Forwarding\PanelSessionStore;
 
 /*
- * The hunt-group chooser lives on the Overview, above the call flow it
+ * The hunt-group chooser lives on the Overview, above the configuration it
  * scopes, and saves through its own action rather than the Settings form.
  *
  * With no credentials configured the chooser never tries a login, so these
@@ -46,7 +46,7 @@ function capture(callable $render): string
     return (string) ob_get_clean();
 }
 
-it('draws the chooser on the Overview, ahead of the call flow', function () {
+it('draws the chooser on the Overview, ahead of the configuration', function () {
     WpState::$options[TAMAR_OPTION_KEY] = ['huntgroup_id' => '157626'];
 
     $html = capture(fn () => chooserPage()->renderOverview());

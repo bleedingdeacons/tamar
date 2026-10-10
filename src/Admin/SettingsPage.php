@@ -64,7 +64,6 @@ final class SettingsPage
         add_action('admin_menu', [$this, 'addMenu']);
         add_action('admin_post_tamar_save_settings', [$this, 'handleSave']);
         add_action('admin_post_tamar_test_connection', [$this, 'handleTest']);
-        add_action('admin_post_tamar_commit', [$this, 'handleCommit']);
         add_action('admin_post_tamar_select_huntgroup', [$this, 'handleSelectHuntgroup']);
     }
 
@@ -413,7 +412,7 @@ final class SettingsPage
             return;
         }
 
-        // The group's own settings and the ring timeouts are Tamar's, not
+        // The announcement, voicemail and ring timeouts are Tamar's, not
         // the contract's. Best-effort: the table renders without them.
         $huntgroup = null;
         if ($service instanceof HuntgroupCallForwardingService) {
@@ -425,15 +424,6 @@ final class SettingsPage
         }
 
         (new ForwardingOverview())->render($rules, $targets, $huntgroup);
-
-        if (current_user_can('beacon_push_config')) {
-            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:1em;">';
-            echo '<input type="hidden" name="action" value="tamar_commit">';
-            wp_nonce_field('tamar_commit');
-            echo '<button class="button button-primary" type="submit">' . esc_html__('Apply pending changes upstream', 'tamar') . '</button>';
-            echo ' <span class="description">' . esc_html__('Some PBXes require an explicit apply step after edits.', 'tamar') . '</span>';
-            echo '</form>';
-        }
     }
 
     public function handleSave(): void
@@ -518,7 +508,7 @@ final class SettingsPage
     }
 
     /**
-     * The Overview's hunt-group chooser, above the call flow it scopes.
+     * The Overview's hunt-group chooser, above the configuration it scopes.
      *
      * The numeric id still scopes every upstream request
      * (?huntgroup=<id>), but once Tamar can log in we let the operator
@@ -663,25 +653,6 @@ final class SettingsPage
             }
         }
         return '';
-    }
-
-    public function handleCommit(): void
-    {
-        if (!current_user_can('beacon_push_config')) {
-            wp_die(esc_html__('You do not have permission to push forwarding changes upstream.', 'tamar'));
-        }
-        check_admin_referer('tamar_commit');
-
-        try {
-            /** @var CallForwardingService $service */
-            $service = $this->container->get(CallForwardingService::class);
-            $service->commit();
-            $this->setFlash('success', __('Forwarding changes pushed upstream.', 'tamar'));
-        } catch (\Throwable $e) {
-            $this->setFlash('error', __('Commit failed: ', 'tamar') . $e->getMessage());
-        }
-
-        $this->redirectTo(self::OVERVIEW_SLUG);
     }
 
     /**
