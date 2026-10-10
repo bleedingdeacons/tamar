@@ -532,12 +532,12 @@ final class SettingsPage
         echo '<h5 class="tamar-card__title">' . esc_html__('Select a hunt group', 'tamar') . '</h5>';
         echo '<p>' . esc_html__('The hunt group shown below, and the one Tamar reads and writes.', 'tamar') . '</p>';
         echo '<p><label for="tamar-huntgroup-id" class="screen-reader-text">' . esc_html__('Hunt group', 'tamar') . '</label> ';
+        // No Save button: the dropdown submits as soon as a group is
+        // picked, and the raw-id field, the form's only text input,
+        // submits on Enter.
         $this->renderHuntgroupField($settings, $disabled);
-        if ($canEdit) {
-            echo '<button type="submit" class="button button-primary">' . esc_html__('Save', 'tamar') . '</button> ';
-        }
-        // Refresh re-runs the live fetch of both the list and the call
-        // flow by reloading the page (GET). It's a link, not a <button>,
+        // Refresh re-runs the live fetch of both the list and the
+        // configuration by reloading the page (GET). It's a link, not a <button>,
         // so it never submits the form around it.
         echo '<a href="' . esc_url(admin_url('admin.php?page=' . self::OVERVIEW_SLUG)) . '" class="button">'
             . esc_html__('Refresh', 'tamar') . '</a>';
@@ -561,12 +561,12 @@ final class SettingsPage
         if ($groups === []) {
             echo '<input id="tamar-huntgroup-id" name="huntgroup_id" type="text" class="regular-text" value="' . esc_attr($current) . '"' . $disabled . '> ';
             echo '<span class="description">'
-                . esc_html__('Once your credentials are saved under Settings and Tamar can reach the control panel, this becomes a name dropdown automatically. Until then, paste the numeric ID from the upstream edit URL — e.g. 157626 in ".../huntgroup?huntgroup=157626".', 'tamar')
+                . esc_html__('Once your credentials are saved under Settings and Tamar can reach the control panel, this becomes a name dropdown automatically. Until then, paste the numeric ID from the upstream edit URL — e.g. 157626 in ".../huntgroup?huntgroup=157626" — and press Enter.', 'tamar')
                 . '</span> ';
             return;
         }
 
-        echo '<select id="tamar-huntgroup-id" name="huntgroup_id"' . $disabled . '>';
+        echo '<select id="tamar-huntgroup-id" name="huntgroup_id" onchange="this.form.submit()"' . $disabled . '>';
         echo '<option value="">' . esc_html__('— Select a hunt group —', 'tamar') . '</option>';
         $found = false;
         foreach ($groups as $group) {
