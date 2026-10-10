@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Tamar\Tests\Unit;
 
 use BleedingDeacons\WpMocks\Exceptions\WpDieException;
+use Beacon\Forwarding\Interfaces\CallForwardingService;
+use Beacon\Transport\Interfaces\HttpTransport;
 use BleedingDeacons\WpMocks\WpState;
 use Psr\Container\ContainerInterface;
 use Tamar\Admin\SettingsPage;
 use Tamar\Admin\TamarSettings;
+use Tamar\Forwarding\HuntgroupCallForwardingService;
+use Tamar\Forwarding\HuntgroupFormBuilder;
+use Tamar\Forwarding\HuntgroupPageParser;
 use Tamar\Forwarding\PanelSessionStore;
 
 /*
@@ -54,10 +59,54 @@ it('draws the chooser on the Overview, ahead of the configuration', function () 
     expect($html)->toContain(
         'name="action" value="tamar_select_huntgroup"',
         'id="tamar-huntgroup-id" name="huntgroup_id" type="text" class="regular-text" value="157626"',
-        '>Save</button>',
         'href="https://example.test/wp-admin/admin.php?page=tamar-overview" class="button">Refresh</a>',
-    )->and(strpos($html, 'tamar_select_huntgroup'))
+    )->and($html)->not->toContain('<button')
+        ->and(strpos($html, 'tamar_select_huntgroup'))
         ->toBeLessThan(strpos($html, 'No driver is bound.'));
+});
+
+it('saves a hunt group as soon as it is picked from the dropdown', function () {
+    TamarSettings::save(['base_url' => 'https://example.tamartelecommunications.co.uk', 'username' => 'demo', 'password_plaintext' => 'pw']);
+    TamarSettings::saveHuntgroupId('157626');
+
+    $panel = new class implements HttpTransport {
+        public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+        {
+            $page = str_contains($url, '?huntgroup=')
+                ? (string) file_get_contents(__DIR__ . '/../Fixtures/huntgroup_157626.html')
+                : '<html><body><select name="huntgroup"><option value="157626">New Rota</option></select></body></html>';
+            return ['status' => 200, 'headers' => [], 'body' => str_contains($url, '/login') ? '' : $page];
+        }
+    };
+    $service = new HuntgroupCallForwardingService(
+        transport: $panel,
+        parser: new HuntgroupPageParser(),
+        builder: new HuntgroupFormBuilder(),
+        baseUrl: 'https://example.tamartelecommunications.co.uk',
+        username: 'demo',
+        password: 'pw',
+        huntgroupId: '157626',
+    );
+    $page = new SettingsPage(new class ($service) implements ContainerInterface {
+        public function __construct(private object $service)
+        {
+        }
+
+        public function get(string $id): mixed
+        {
+            return $this->service;
+        }
+
+        public function has(string $id): bool
+        {
+            return $id === CallForwardingService::class;
+        }
+    });
+
+    $html = capture(fn () => $page->renderOverview());
+
+    expect($html)->toContain('<select id="tamar-huntgroup-id" name="huntgroup_id" onchange="this.form.submit()">')
+        ->and($html)->not->toContain('<button');
 });
 
 it('shows a viewer the hunt group and Refresh, but nothing to save with', function () {
@@ -66,7 +115,7 @@ it('shows a viewer the hunt group and Refresh, but nothing to save with', functi
     $html = capture(fn () => chooserPage()->renderOverview());
 
     expect($html)->toContain('name="huntgroup_id" type="text" class="regular-text" value="" disabled>', '>Refresh</a>')
-        ->and($html)->not->toContain('>Save</button>');
+        ->and($html)->not->toContain('<button');
 });
 
 it('no longer offers the hunt group on the Settings page', function () {

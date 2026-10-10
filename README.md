@@ -90,7 +90,7 @@ An announcement or voicemail box the panel no longer offers is refused before an
 
 ### Hunt group
 
-The hunt group is chosen on **Tamar → Overview**, above the configuration it scopes. Once the credentials above are saved and Tamar can log in, it is a dropdown of the account's hunt groups by name; until then it takes the numeric ID from the upstream edit URL — e.g. `157626` from `.../huntgroup?huntgroup=157626`. Without it Tamar can't tell which hunt group on the account to edit. **Refresh** reloads both the list and the configuration from the panel.
+The hunt group is chosen on **Tamar → Overview**, above the configuration it scopes. Once the credentials above are saved and Tamar can log in, it is a dropdown of the account's hunt groups by name, and picking one saves it; until then it takes the numeric ID from the upstream edit URL — e.g. `157626` from `.../huntgroup?huntgroup=157626` — saved by pressing Enter. Without it Tamar can't tell which hunt group on the account to edit. **Refresh** reloads both the list and the configuration from the panel.
 
 ## Hooks
 
