@@ -77,6 +77,23 @@ it('returns listRules with the voicemail box resolved', function () {
         ->and($rules[1]->getTargetId())->toBe('num:01454898476');
 });
 
+it('summarises the hunt group settings and timeouts from the same page', function () {
+    $transport = new FakeHttpTransport(['default' => serviceFixture()]);
+    $service = makeHuntgroupService($transport);
+
+    $service->listRules();
+    $before = count($transport->log);
+    $summary = $service->huntgroupSummary();
+
+    expect($summary)->toBe([
+        'name' => 'New Rota',
+        'greeting' => '',
+        'voicemail' => 'Voice to Email',
+        'hunting' => 'Hunt in-order',
+        'timeouts' => ['1' => 90, '2' => 90, '3' => 90, '4' => 60],
+    ])->and(count($transport->log))->toBe($before);
+});
+
 it('caches listRules within a request', function () {
     $transport = new FakeHttpTransport(['default' => serviceFixture()]);
     $service = makeHuntgroupService($transport);

@@ -57,7 +57,7 @@ it('draws the chooser on the Overview, ahead of the call flow', function () {
         '>Save</button>',
         'href="https://example.test/wp-admin/admin.php?page=tamar-overview" class="button">Refresh</a>',
     )->and(strpos($html, 'tamar_select_huntgroup'))
-        ->toBeLessThan(strpos($html, 'Current forwarding state'));
+        ->toBeLessThan(strpos($html, 'No driver is bound.'));
 });
 
 it('shows a viewer the hunt group and Refresh, but nothing to save with', function () {

@@ -12,298 +12,232 @@ use Beacon\Forwarding\Models\ForwardingRule;
 use Beacon\Targets\Models\ForwardingTarget;
 
 /**
- * Read-only "current forwarding setup" view.
+ * Read-only "current forwarding setup" view, laid out like the panel's
+ * own hunt-group page (/phonedivert/huntgroup?huntgroup=<id>).
  *
- * The hunt group is really an ordered ring sequence: each rule forwards
- * to a target during a day/time window, lower priority rings first, and
- * a voicemail target acts as the fall-through. Two flat tables hide that
- * shape, so this renders it as a call flow grouped by day — each day's
- * rules in time order, the week starting Monday — plus a grouped
- * reference of the known targets.
+ * The page is one card: the group's Name, Announcement, Voicemail and
+ * Hunting type across the top, then an "Existing configuration" table
+ * with a row per rota line — order, Su–Sa, start and end time, VM, the
+ * number calls divert to, a comment, the ring timeout and whether the
+ * line is active. Above the rows sits a notice when an announcement
+ * plays first, and below them one when unanswered calls go to
+ * voicemail, as the panel shows them. Mirroring it means an operator
+ * who knows one screen can read the other without translation.
  *
- * Deliberately built from the Beacon CallForwardingService contract only
- * — the ForwardingRule getters and the target models returned by
- * listTargets() (getId/getLabel/getKind/getAddress). It never reaches
- * into Tamar-specific internals (the parser's `meta`, `_raw`, etc.), so
- * a sibling plugin that swaps the bound driver gets a working overview
- * for free.
+ * The rows are built from the Beacon CallForwardingService contract
+ * only — the ForwardingRule getters and the targets from listTargets().
+ * The group's settings and the timeouts are not in the contract, so
+ * they come in as an optional $huntgroup summary (Tamar's driver
+ * supplies it, see HuntgroupCallForwardingService::huntgroupSummary()).
+ * Without one, the settings row and both notices are left out and each
+ * timeout shows as "—", so a sibling plugin that swaps the bound driver
+ * still gets a working table.
  *
- * Note on scope: the rota name, hunting strategy, and greeting are NOT
- * exposed by the contract (they live in the parser's `meta` bucket), so
- * they can't be shown here without a new contract method. The header
- * line states the assumed "hunt in order" semantics rather than reading
- * a real strategy.
+ * @phpstan-type HuntgroupSummary array{name: string, greeting: string, voicemail: string, hunting: string, timeouts: array<string, int>}
  */
 final class ForwardingOverview
 {
-    /** Day codes as the time-window match stores them, Monday first. */
-    private const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    /** Day codes as the time-window match stores them, in the panel's column order. */
+    private const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
     /**
-     * @param ForwardingRule[]   $rules   From CallForwardingService::listRules()
-     * @param ForwardingTarget[] $targets From CallForwardingService::listTargets()
-     *                                    — which is what the contract has always
-     *                                    returned. The previous `object[]` said
-     *                                    nothing, so every getter call below was
-     *                                    a call on a shapeless object.
+     * @param ForwardingRule[]      $rules     From CallForwardingService::listRules()
+     * @param ForwardingTarget[]    $targets   From CallForwardingService::listTargets()
+     * @param HuntgroupSummary|null $huntgroup The group's settings and timeouts, when the
+     *                                         driver can say.
      */
-    public function render(array $rules, array $targets): void
+    public function render(array $rules, array $targets, ?array $huntgroup = null): void
     {
-        // Index targets by id so each rule can resolve its destination.
         $targetsById = [];
         foreach ($targets as $target) {
             $targetsById[$target->getId()] = $target;
         }
 
-        $activeCount = 0;
-        foreach ($rules as $rule) {
-            if ($rule->isEnabled()) {
-                $activeCount++;
-            }
-        }
+        // The panel lists rows in hunt order. usort is on a local copy,
+        // so the caller's order is untouched.
+        usort($rules, static fn(ForwardingRule $a, ForwardingRule $b): int
+            => $a->getPriority() <=> $b->getPriority());
 
         echo '<div class="tamar-overview">';
         $this->styles();
 
-        echo '<div class="tamar-overview__head">';
-        echo '<h2>' . esc_html__('Call flow', 'tamar') . '</h2>';
-        echo '<span class="tamar-overview__hint">' . esc_html__('By day, earliest first — overlapping windows ring in hunt order', 'tamar') . '</span>';
-        echo '</div>';
-        echo '<p class="tamar-overview__sub">'
-            . esc_html(sprintf(
-                /* translators: %d: number of active forwarding steps */
-                _n('%d active step', '%d active steps', $activeCount, 'tamar'),
-                $activeCount
-            ))
-            . '</p>';
+        echo '<fieldset class="tamar-card">';
+        $name = $huntgroup['name'] ?? '';
+        echo '<legend class="tamar-card__legend">'
+            . esc_html($name !== ''
+                /* translators: %s: hunt group name */
+                ? sprintf(__('Hunt Group %s', 'tamar'), $name)
+                : __('Hunt Group', 'tamar'))
+            . '</legend>';
+
+        if ($huntgroup !== null) {
+            $this->renderSettings($huntgroup);
+        }
+
+        echo '<h5 class="tamar-card__title">' . esc_html__('Existing configuration', 'tamar') . '</h5>';
 
         if ($rules === []) {
             echo '<p class="tamar-empty">'
                 . esc_html__('No forwarding rules configured — Tamar is not routing calls for this hunt group.', 'tamar')
                 . '</p>';
         } else {
-            // Hunt order is the tie-break within a day, so resolve the
-            // voicemail tail against it before regrouping. usort is on a
-            // local copy (arrays are passed by value), so the caller's
-            // order is untouched.
-            usort($rules, static fn(ForwardingRule $a, ForwardingRule $b): int
-                => $a->getPriority() <=> $b->getPriority());
-
-            $lastVoicemail = null;
-            foreach ($rules as $rule) {
-                $target = $targetsById[$rule->getTargetId()] ?? null;
-                if ($target !== null && $target->getKind() === 'voicemail') {
-                    $lastVoicemail = $target;
-                }
-            }
-
-            foreach ($this->groupByDay($rules) as $day => $dayRules) {
-                $this->renderDay($day, $dayRules, $targetsById);
-            }
-
-            // If any step routes to voicemail, show it as the fall-through
-            // tail so the "and finally…" behaviour is explicit.
-            if ($lastVoicemail !== null) {
-                echo '<ol class="tamar-flow">';
-                $this->renderFallThrough($lastVoicemail);
-                echo '</ol>';
-            }
+            $this->renderTable($rules, $targetsById, $huntgroup);
         }
 
-        $this->renderTargets($targets);
+        echo '</fieldset>';
+        echo '</div>';
+    }
 
+    /** @param HuntgroupSummary $huntgroup */
+    private function renderSettings(array $huntgroup): void
+    {
+        $fields = [
+            __('Name', 'tamar') => $huntgroup['name'],
+            __('Announcement', 'tamar') => $huntgroup['greeting'] !== '' ? $huntgroup['greeting'] : __('None', 'tamar'),
+            __('Voicemail', 'tamar') => $huntgroup['voicemail'] !== '' ? $huntgroup['voicemail'] : __('None', 'tamar'),
+            __('Hunting type', 'tamar') => $huntgroup['hunting'],
+        ];
+
+        echo '<div class="tamar-settings">';
+        foreach ($fields as $label => $value) {
+            echo '<div class="tamar-settings__field">';
+            echo '<p>' . esc_html($label) . '</p>';
+            echo $this->pill($value);
+            echo '</div>';
+        }
         echo '</div>';
     }
 
     /**
-     * Bucket rules under the days they apply to, Monday first.
-     *
-     * A time-window rule appears under every day it has ticked, and a
-     * catchall under all seven. Anything else — a time window with no
-     * days ticked, or a match type that isn't about time at all — goes
-     * into a trailing '' bucket rather than being guessed onto a day:
-     * whether an unticked row rings every day or never is the upstream's
-     * call, not something the contract says.
-     *
-     * Every day is present even when empty, so a gap in cover shows as
-     * a gap. Within a day, rules sort by start time and then by hunt
-     * order, which is what decides between overlapping windows.
-     *
-     * @param ForwardingRule[] $rules Already in hunt order.
-     * @return array<string, ForwardingRule[]> Keyed by day code, '' last.
-     */
-    private function groupByDay(array $rules): array
-    {
-        $groups = array_fill_keys(self::DAYS, []);
-        $unscheduled = [];
-
-        foreach ($rules as $rule) {
-            if ($rule->isCatchall()) {
-                foreach (self::DAYS as $day) {
-                    $groups[$day][] = $rule;
-                }
-                continue;
-            }
-
-            $days = $rule->getMatchType() === 'time_window'
-                ? array_intersect(self::DAYS, array_map('strtolower', $this->windowDays($rule)))
-                : [];
-            if ($days === []) {
-                $unscheduled[] = $rule;
-                continue;
-            }
-            foreach ($days as $day) {
-                $groups[$day][] = $rule;
-            }
-        }
-
-        // usort is stable, so equal start times keep hunt order.
-        foreach ($groups as $day => $dayRules) {
-            usort($dayRules, fn(ForwardingRule $a, ForwardingRule $b): int
-                => $this->windowFrom($a) <=> $this->windowFrom($b));
-            $groups[$day] = $dayRules;
-        }
-
-        if ($unscheduled !== []) {
-            $groups[''] = $unscheduled;
-        }
-
-        return $groups;
-    }
-
-    /**
-     * @param ForwardingRule[]                $rules
+     * @param ForwardingRule[]                $rules Already in hunt order.
      * @param array<string, ForwardingTarget> $targetsById
+     * @param HuntgroupSummary|null           $huntgroup
      */
-    private function renderDay(string $day, array $rules, array $targetsById): void
+    private function renderTable(array $rules, array $targetsById, ?array $huntgroup): void
     {
-        $heading = $day === '' ? __('Not scheduled by day', 'tamar') : $this->dayName($day);
+        echo '<div class="tamar-table-wrap"><table class="tamar-table">';
+        echo '<thead>';
+        echo '<tr><th rowspan="2">&nbsp;</th>'
+            . '<th colspan="9">' . esc_html__('Enable on which days?', 'tamar') . '</th>'
+            . '<th rowspan="2">' . esc_html__('VM', 'tamar') . '</th>'
+            . '<th rowspan="2">' . esc_html__('Divert my calls to:', 'tamar') . '</th>'
+            . '<th rowspan="2">' . esc_html__('Comment', 'tamar') . '</th>'
+            . '<th rowspan="2">' . esc_html__('Timeout', 'tamar') . '</th>'
+            . '<th rowspan="2">' . esc_html__('Active', 'tamar') . '</th></tr>';
+        echo '<tr>';
+        foreach (self::DAYS as $day) {
+            echo '<th class="tamar-table__day">' . esc_html($this->dayAbbrev($day)) . '</th>';
+        }
+        echo '<th>' . esc_html__('Start time', 'tamar') . '</th>'
+            . '<th>' . esc_html__('End time', 'tamar') . '</th>';
+        echo '</tr>';
+        echo '</thead><tbody>';
 
-        echo '<section class="tamar-day">';
-        echo '<h3 class="tamar-day__head">' . esc_html($heading)
-            . ' <span>(' . count($rules) . ')</span></h3>';
-
-        if ($rules === []) {
-            echo '<p class="tamar-day__empty">' . esc_html__('Nothing forwarded on this day.', 'tamar') . '</p>';
-            echo '</section>';
-            return;
+        if ($huntgroup !== null && $huntgroup['greeting'] !== '') {
+            echo '<tr class="tamar-notice tamar-notice--info"><td colspan="15">'
+                . esc_html__('Announcement will be played before we try to connect the call.', 'tamar')
+                . '</td></tr>';
         }
 
-        echo '<ol class="tamar-flow">';
+        $position = 0;
         foreach ($rules as $rule) {
-            $this->renderStep($rule, $targetsById[$rule->getTargetId()] ?? null, $day === '');
+            $position++;
+            $timeout = $huntgroup['timeouts'][$rule->getId()] ?? null;
+            $this->renderRow($position, $rule, $targetsById[$rule->getTargetId()] ?? null, $timeout);
         }
-        echo '</ol>';
-        echo '</section>';
+
+        if ($huntgroup !== null && $huntgroup['voicemail'] !== '') {
+            echo '<tr class="tamar-notice tamar-notice--warning"><td colspan="15">'
+                . esc_html__('Voicemail is enabled if calls are not answered.', 'tamar')
+                . '</td></tr>';
+        }
+
+        echo '</tbody></table></div>';
     }
 
-    /**
-     * @param bool $unscheduled Rules outside the day grid have no window
-     *                          to show in the time column, so they get
-     *                          the long-form description instead.
-     */
-    private function renderStep(ForwardingRule $rule, ?ForwardingTarget $target, bool $unscheduled): void
+    private function renderRow(int $position, ForwardingRule $rule, ?ForwardingTarget $target, ?int $timeout): void
     {
         $enabled = $rule->isEnabled();
-        $classes = 'tamar-step' . ($enabled ? '' : ' tamar-step--off');
-        $label = $rule->getLabel() !== '' ? $rule->getLabel() : __('(unnamed rule)', 'tamar');
+        echo '<tr class="' . esc_attr('tamar-row' . ($enabled ? '' : ' tamar-row--off')) . '">';
+        echo '<td class="tamar-table__order">' . $position . '</td>';
 
-        echo '<li class="' . esc_attr($classes) . '">';
-        echo '<span class="tamar-step__time">'
-            . esc_html($unscheduled ? '—' : $this->describeWindow($rule)) . '</span>';
-        echo '<div class="tamar-step__body">';
-
-        echo '<div class="tamar-step__head">';
-        echo '<strong>' . esc_html($label) . '</strong>';
-        echo $enabled
-            ? '<span class="tamar-badge tamar-badge--on">' . esc_html__('Active', 'tamar') . '</span>'
-            : '<span class="tamar-badge tamar-badge--off">' . esc_html__('Disabled', 'tamar') . '</span>';
-        echo '</div>';
-
-        echo '<div class="tamar-step__dest"><span class="dashicons dashicons-arrow-right-alt2"></span> '
-            . $this->describeTarget($rule->getTargetId(), $target)
-            . '</div>';
-
-        if ($unscheduled) {
-            echo '<div class="tamar-step__when"><span class="dashicons dashicons-clock"></span> '
-                . esc_html($this->describeUnscheduled($rule)) . '</div>';
+        $days = $this->ruleDays($rule);
+        foreach (self::DAYS as $day) {
+            echo '<td class="tamar-table__day">' . $this->tick(in_array($day, $days, true), $this->dayName($day)) . '</td>';
         }
 
-        echo '</div></li>';
-    }
+        [$from, $to] = $this->window($rule);
+        echo '<td>' . $this->pill($from, 'tamar-pill--time') . '</td>';
+        echo '<td>' . $this->pill($to, 'tamar-pill--time') . '</td>';
 
-    private function renderFallThrough(ForwardingTarget $voicemail): void
-    {
-        $label = $voicemail->getLabel() !== '' ? $voicemail->getLabel() : $voicemail->getId();
-        echo '<li class="tamar-step tamar-step--tail">';
-        echo '<span class="tamar-step__num dashicons dashicons-redo"></span>';
-        echo '<div class="tamar-step__body">';
-        echo '<span class="dashicons dashicons-microphone"></span> ';
-        echo esc_html__('Falls through to', 'tamar') . ' <strong>' . esc_html($label) . '</strong> ';
-        echo '<span class="tamar-target__kind">' . esc_html__('voicemail', 'tamar') . '</span>';
-        echo '</div></li>';
+        echo '<td class="tamar-table__check">' . $this->tick($this->isVoicemail($rule, $target), __('Voicemail', 'tamar')) . '</td>';
+        echo '<td>' . $this->pill($this->destination($rule, $target), 'tamar-pill--dest', __('Destination', 'tamar')) . '</td>';
+        echo '<td>' . $this->pill($rule->getLabel(), 'tamar-pill--comment', __('Description or comment', 'tamar')) . '</td>';
+        echo '<td>' . $this->pill($timeout !== null ? (string) $timeout : '—', 'tamar-pill--timeout') . '</td>';
+        echo '<td class="tamar-table__check">' . $this->tick($enabled, __('Active', 'tamar')) . '</td>';
+        echo '</tr>';
     }
 
     /**
-     * Render a rule's destination. Resolves the target where possible;
-     * falls back to the raw target id so nothing is silently dropped.
+     * A read-only stand-in for one of the panel's rounded inputs. An
+     * empty value shows the placeholder greyed out, as the panel does.
      */
-    private function describeTarget(string $targetId, ?ForwardingTarget $target): string
+    private function pill(string $value, string $modifier = '', string $placeholder = ''): string
     {
-        if ($target === null) {
-            return '<span class="tamar-target tamar-target--unknown"><code>'
-                . esc_html($targetId) . '</code></span>';
-        }
-
-        $kind = $target->getKind();
-        $icon = match ($kind) {
-            'voicemail' => 'dashicons-microphone',
-            'queue'     => 'dashicons-groups',
-            'number'    => 'dashicons-phone',
-            default     => 'dashicons-marker',
-        };
-        $label = $target->getLabel() !== '' ? $target->getLabel() : $target->getId();
-
-        $out = '<span class="tamar-target">';
-        $out .= '<span class="dashicons ' . esc_attr($icon) . '"></span> ';
-        $out .= '<strong>' . esc_html($label) . '</strong>';
-        if ($target->getAddress() !== '') {
-            $out .= ' <span class="tamar-target__addr">' . esc_html($target->getAddress()) . '</span>';
-        }
-        $out .= ' <span class="tamar-target__kind">' . esc_html($kind) . '</span>';
-        $out .= '</span>';
-
-        return $out;
+        $classes = trim('tamar-pill ' . $modifier . ($value === '' ? ' tamar-pill--empty' : ''));
+        return '<span class="' . esc_attr($classes) . '">'
+            . esc_html($value !== '' ? $value : $placeholder)
+            . '</span>';
     }
 
     /**
-     * A rule's time of day, e.g. "10:00–14:00". A catchall, or a window
-     * with neither end set, covers the whole day.
+     * A read-only stand-in for one of the panel's checkboxes — a real
+     * disabled checkbox would grey out and read as "not applicable".
      */
-    private function describeWindow(ForwardingRule $rule): string
+    private function tick(bool $on, string $label): string
     {
+        return '<span class="' . esc_attr('tamar-tick' . ($on ? ' tamar-tick--on' : '')) . '" role="img" aria-label="'
+            . esc_attr(sprintf('%s: %s', $label, $on ? __('yes', 'tamar') : __('no', 'tamar')))
+            . '"></span>';
+    }
+
+    /**
+     * Days a rule rings on. A catchall rings every day; a match type that
+     * isn't a time window ticks none, as the contract says nothing about
+     * its days.
+     *
+     * @return string[]
+     */
+    private function ruleDays(ForwardingRule $rule): array
+    {
+        if ($rule->isCatchall()) {
+            return self::DAYS;
+        }
+        if ($rule->getMatchType() !== 'time_window') {
+            return [];
+        }
+        $days = $this->windowValue($rule)['days'] ?? null;
+        return is_array($days) ? array_map(static fn($d): string => strtolower((string) $d), $days) : [];
+    }
+
+    /**
+     * A rule's start and end time. A catchall covers the whole day; a
+     * match type that isn't a time window has none to show.
+     *
+     * @return array{string, string}
+     */
+    private function window(ForwardingRule $rule): array
+    {
+        if ($rule->isCatchall()) {
+            return ['00:00', '23:59'];
+        }
+        if ($rule->getMatchType() !== 'time_window') {
+            return ['—', '—'];
+        }
         $value = $this->windowValue($rule);
-        $from  = (string) ($value['from'] ?? '');
-        $to    = (string) ($value['to'] ?? '');
-
-        if ($rule->isCatchall() || ($from === '' && $to === '')) {
-            return __('All day', 'tamar');
-        }
-
-        return sprintf('%s–%s', $from !== '' ? $from : '00:00', $to !== '' ? $to : '23:59');
-    }
-
-    /**
-     * Why a rule sits outside the day grid: a time window with no days
-     * ticked, or a match type that isn't about time.
-     */
-    private function describeUnscheduled(ForwardingRule $rule): string
-    {
-        if ($rule->getMatchType() === 'time_window') {
-            return __('No days ticked', 'tamar') . ' · ' . $this->describeWindow($rule);
-        }
-
-        return sprintf(/* translators: %s: match type */ __('Match: %s', 'tamar'), $rule->getMatchType());
+        $from = (string) ($value['from'] ?? '');
+        $to = (string) ($value['to'] ?? '');
+        return [$from !== '' ? $from : '00:00', $to !== '' ? $to : '23:59'];
     }
 
     /** @return array<mixed> */
@@ -313,76 +247,68 @@ final class ForwardingOverview
         return is_array($match['value'] ?? null) ? $match['value'] : [];
     }
 
-    /** @return string[] */
-    private function windowDays(ForwardingRule $rule): array
+    private function isVoicemail(ForwardingRule $rule, ?ForwardingTarget $target): bool
     {
-        $days = $this->windowValue($rule)['days'] ?? null;
-        return is_array($days) ? array_map('strval', $days) : [];
+        return $target !== null
+            ? $target->getKind() === 'voicemail'
+            : str_starts_with($rule->getTargetId(), 'vm:');
     }
 
-    /** Sort key for a day: HH:MM compares correctly as a string. */
-    private function windowFrom(ForwardingRule $rule): string
+    /**
+     * What the panel's "Divert my calls to" box would hold: the number,
+     * or the word voicemail/queue. An unresolved target falls back to its
+     * raw id so nothing is silently dropped; an empty one stays empty.
+     */
+    private function destination(ForwardingRule $rule, ?ForwardingTarget $target): string
     {
-        $from = (string) ($this->windowValue($rule)['from'] ?? '');
-        return $from !== '' ? $from : '00:00';
+        if ($this->isVoicemail($rule, $target)) {
+            return 'voicemail';
+        }
+        if ($target === null) {
+            $id = $rule->getTargetId();
+            return $id === 'num:' ? '' : $id;
+        }
+        if ($target->getKind() === 'queue') {
+            return 'queue';
+        }
+        return $target->getAddress() !== '' ? $target->getAddress() : $target->getId();
+    }
+
+    private function dayAbbrev(string $day): string
+    {
+        return match ($day) {
+            'sun' => _x('Su', 'Sunday, abbreviated', 'tamar'),
+            'mon' => _x('Mo', 'Monday, abbreviated', 'tamar'),
+            'tue' => _x('Tu', 'Tuesday, abbreviated', 'tamar'),
+            'wed' => _x('We', 'Wednesday, abbreviated', 'tamar'),
+            'thu' => _x('Th', 'Thursday, abbreviated', 'tamar'),
+            'fri' => _x('Fr', 'Friday, abbreviated', 'tamar'),
+            default => _x('Sa', 'Saturday, abbreviated', 'tamar'),
+        };
     }
 
     private function dayName(string $day): string
     {
         return match ($day) {
+            'sun' => __('Sunday', 'tamar'),
             'mon' => __('Monday', 'tamar'),
             'tue' => __('Tuesday', 'tamar'),
             'wed' => __('Wednesday', 'tamar'),
             'thu' => __('Thursday', 'tamar'),
             'fri' => __('Friday', 'tamar'),
-            'sat' => __('Saturday', 'tamar'),
-            default => __('Sunday', 'tamar'),
+            default => __('Saturday', 'tamar'),
         };
     }
 
-    /** @param ForwardingTarget[] $targets */
-    private function renderTargets(array $targets): void
-    {
-        echo '<h2 class="tamar-overview__targets-head">' . esc_html__('Known targets', 'tamar') . '</h2>';
-
-        if ($targets === []) {
-            echo '<p class="tamar-empty">' . esc_html__('No targets reported by the upstream.', 'tamar') . '</p>';
-            return;
-        }
-
-        $byKind = [];
-        foreach ($targets as $target) {
-            $byKind[$target->getKind()][] = $target;
-        }
-        ksort($byKind);
-
-        echo '<div class="tamar-targets">';
-        foreach ($byKind as $kind => $group) {
-            echo '<div class="tamar-targets__group">';
-            echo '<div class="tamar-targets__kind">'
-                . esc_html(ucfirst((string) $kind))
-                . ' <span>(' . count($group) . ')</span></div>';
-            echo '<ul>';
-            foreach ($group as $target) {
-                $label = $target->getLabel() !== '' ? $target->getLabel() : $target->getId();
-                echo '<li><strong>' . esc_html($label) . '</strong>';
-                if ($target->getAddress() !== '') {
-                    echo ' <span class="tamar-target__addr">' . esc_html($target->getAddress()) . '</span>';
-                }
-                echo '</li>';
-            }
-            echo '</ul></div>';
-        }
-        echo '</div>';
-    }
-
     /**
-     * Scoped inline styles. Kept inline (rather than enqueued) so the
-     * view is a single self-contained drop-in; everything is namespaced
-     * under .tamar-overview and uses WP admin colour cues so it sits
-     * naturally in wp-admin and respects the active colour scheme.
+     * Scoped inline styles, kept inline so the view is a single
+     * self-contained drop-in; everything is namespaced under
+     * .tamar-overview. Colours, radii and type sizes are the panel's own
+     * (its Bootstrap theme), so the two screens look alike. Public so
+     * the Overview page can print them before its hunt-group chooser,
+     * which uses the same card; they print once per request.
      */
-    private function styles(): void
+    public function styles(): void
     {
         static $printed = false;
         if ($printed) {
@@ -391,42 +317,38 @@ final class ForwardingOverview
         $printed = true;
 
         echo '<style>
-.tamar-overview{max-width:760px;}
-.tamar-overview__head{display:flex;align-items:baseline;justify-content:space-between;gap:1em;}
-.tamar-overview__head h2{margin:0;}
-.tamar-overview__hint{color:#646970;font-size:13px;}
-.tamar-overview__sub{color:#646970;margin:.25em 0 1em;}
-.tamar-overview__targets-head{margin-top:1.75em;}
-.tamar-flow{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
-.tamar-step{display:flex;gap:12px;background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:.85em 1em;}
-.tamar-step--off{opacity:.6;}
-.tamar-step--tail{align-items:center;background:transparent;border-style:dashed;}
-.tamar-step__num{flex:0 0 26px;height:26px;border-radius:50%;background:#f0f0f1;display:flex;align-items:center;justify-content:center;font-weight:600;color:#646970;font-size:13px;}
-.tamar-step__time{flex:0 0 96px;font-family:Consolas,Monaco,monospace;font-size:13px;font-weight:600;color:#1d2327;padding-top:2px;}
-.tamar-day{margin-bottom:1.25em;}
-.tamar-day__head{font-size:14px;margin:0 0 .5em;}
-.tamar-day__head span{color:#8c8f94;font-weight:400;}
-.tamar-day__empty{color:#646970;font-style:italic;margin:0;padding:.6em 1em;border:1px dashed #dcdcde;border-radius:8px;}
-.tamar-step__body{flex:1;min-width:0;}
-.tamar-step__head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.tamar-step__head strong{font-size:15px;}
-.tamar-step__dest{display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:14px;margin-bottom:4px;}
-.tamar-step__when{display:flex;align-items:center;gap:5px;color:#646970;font-size:13px;}
-.tamar-step .dashicons{color:#646970;width:18px;height:18px;font-size:18px;}
-.tamar-target{display:inline-flex;align-items:center;flex-wrap:wrap;gap:5px;}
-.tamar-target__addr{font-family:Consolas,Monaco,monospace;font-size:12px;color:#646970;}
-.tamar-target__kind{font-size:11px;padding:1px 7px;border-radius:999px;background:#f0f0f1;color:#646970;}
-.tamar-target--unknown code{font-size:12px;}
-.tamar-badge{font-size:11px;padding:2px 8px;border-radius:999px;}
-.tamar-badge--on{background:#edfaef;color:#0a7d33;}
-.tamar-badge--off{background:#f0f0f1;color:#646970;}
-.tamar-targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
-.tamar-targets__group{background:#f6f7f7;border-radius:6px;padding:.85em 1em;}
-.tamar-targets__kind{font-size:13px;color:#646970;margin-bottom:8px;}
-.tamar-targets__kind span{color:#8c8f94;}
-.tamar-targets__group ul{margin:0;padding:0;list-style:none;}
-.tamar-targets__group li{padding:3px 0;font-size:14px;}
+.tamar-overview{--tamar-ink:#212529;--tamar-purple:#382e62;--tamar-line:#dee2e6;--tamar-input:#ced4da;color:var(--tamar-ink);}
+.tamar-card{background:#fff;border:1px solid #d9dbe6;border-radius:10px;padding:24px;margin:20px 0;font-size:14px;line-height:1.5;}
+.tamar-card__legend{float:left;width:100%;padding:0;margin:0 0 8px;font-size:18px;font-weight:700;color:#888;}
+.tamar-card__legend+*{clear:left;}
+.tamar-card__title{font-size:20px;font-weight:500;color:var(--tamar-purple);margin:32px 0 16px;}
+.tamar-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 24px;}
+.tamar-settings__field p{font-size:15px;margin:0 0 8px;}
+.tamar-settings .tamar-pill{display:block;}
+.tamar-pill{display:inline-block;box-sizing:border-box;min-height:36px;padding:6px 12px;border:1px solid var(--tamar-input);border-radius:20px;background:#fff;font-size:15px;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tamar-pill--empty{color:#8c9196;}
+.tamar-pill--time{min-width:72px;text-align:center;font-variant-numeric:tabular-nums;}
+.tamar-pill--dest{min-width:140px;}
+.tamar-pill--comment{min-width:160px;max-width:220px;}
+.tamar-pill--timeout{min-width:52px;text-align:center;}
+.tamar-table-wrap{overflow-x:auto;}
+.tamar-table{border-collapse:collapse;width:100%;margin:0 0 8px;}
+.tamar-table th{font-weight:700;text-align:left;vertical-align:bottom;padding:8px;border-bottom:1px solid var(--tamar-line);white-space:nowrap;}
+.tamar-table td{padding:8px;border-bottom:1px solid var(--tamar-line);vertical-align:middle;}
+.tamar-table .tamar-table__day{text-align:center;padding-left:2px;padding-right:2px;}
+.tamar-table__check{text-align:center;}
+.tamar-table__order{font-weight:600;color:#646970;text-align:center;width:24px;}
+.tamar-row--off td{opacity:.55;}
+.tamar-tick{display:inline-block;width:14px;height:14px;box-sizing:border-box;border:1px solid #767676;border-radius:3px;background:#fff;vertical-align:middle;position:relative;}
+.tamar-tick--on{background:#0075ff;border-color:#0075ff;}
+.tamar-tick--on::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+.tamar-notice td{padding:12px 16px;}
+.tamar-notice--info td{background:#cfe2ff;color:#084298;border-bottom-color:#b6d4fe;}
+.tamar-notice--warning td{background:#fff3cd;color:#664d03;border-bottom-color:#ffecb5;}
 .tamar-empty{color:#646970;}
+.tamar-card--chooser .tamar-card__title{margin-top:0;}
+.tamar-card--chooser p{margin:0 0 8px;}
+.tamar-card--chooser select,.tamar-card--chooser input[type=text]{border-radius:20px;border-color:var(--tamar-input);padding:4px 32px 4px 12px;min-width:240px;}
 </style>';
     }
 }
