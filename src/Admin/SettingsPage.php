@@ -396,8 +396,6 @@ final class SettingsPage
 
     private function renderStatePanel(): void
     {
-        echo '<h2>' . esc_html__('Current forwarding state', 'tamar') . '</h2>';
-
         if (!$this->container->has(CallForwardingService::class)) {
             echo '<p>' . esc_html__('No driver is bound. (Beacon has loaded, but Tamar failed to register its driver.)', 'tamar') . '</p>';
             return;
@@ -415,7 +413,18 @@ final class SettingsPage
             return;
         }
 
-        (new ForwardingOverview())->render($rules, $targets);
+        // The group's own settings and the ring timeouts are Tamar's, not
+        // the contract's. Best-effort: the table renders without them.
+        $huntgroup = null;
+        if ($service instanceof HuntgroupCallForwardingService) {
+            try {
+                $huntgroup = $service->huntgroupSummary();
+            } catch (\Throwable $e) {
+                self::logWarning('Could not read the hunt group settings for the overview', ['error' => $e->getMessage()]);
+            }
+        }
+
+        (new ForwardingOverview())->render($rules, $targets, $huntgroup);
 
         if (current_user_can('beacon_push_config')) {
             echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:1em;">';
@@ -525,10 +534,14 @@ final class SettingsPage
         $canEdit = current_user_can('beacon_manage_forwarding');
         $disabled = $canEdit ? '' : ' disabled';
 
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="tamar-huntgroup">';
+        (new ForwardingOverview())->styles();
+        echo '<div class="tamar-overview">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="tamar-huntgroup tamar-card tamar-card--chooser">';
         echo '<input type="hidden" name="action" value="tamar_select_huntgroup">';
         wp_nonce_field('tamar_select_huntgroup');
-        echo '<p><label for="tamar-huntgroup-id"><strong>' . esc_html__('Hunt group', 'tamar') . '</strong></label> ';
+        echo '<h5 class="tamar-card__title">' . esc_html__('Select a hunt group', 'tamar') . '</h5>';
+        echo '<p>' . esc_html__('The hunt group shown below, and the one Tamar reads and writes.', 'tamar') . '</p>';
+        echo '<p><label for="tamar-huntgroup-id" class="screen-reader-text">' . esc_html__('Hunt group', 'tamar') . '</label> ';
         $this->renderHuntgroupField($settings, $disabled);
         if ($canEdit) {
             echo '<button type="submit" class="button button-primary">' . esc_html__('Save', 'tamar') . '</button> ';
@@ -540,6 +553,7 @@ final class SettingsPage
             . esc_html__('Refresh', 'tamar') . '</a>';
         echo '</p>';
         echo '</form>';
+        echo '</div>';
     }
 
     /**

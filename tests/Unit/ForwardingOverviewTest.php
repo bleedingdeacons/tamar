@@ -26,93 +26,106 @@ function overviewRule(string $label, int $priority, array $days, string $from, s
 /**
  * @param ForwardingRule[]   $rules
  * @param ForwardingTarget[] $targets
+ * @param array{name: string, greeting: string, voicemail: string, hunting: string, timeouts: array<string, int>}|null $huntgroup
  */
-function renderOverview(array $rules, array $targets = []): string
+function renderOverview(array $rules, array $targets = [], ?array $huntgroup = null): string
 {
     ob_start();
-    (new ForwardingOverview())->render($rules, $targets);
+    (new ForwardingOverview())->render($rules, $targets, $huntgroup);
     return (string) ob_get_clean();
 }
 
 /**
- * Labels in the order they appear under one day's heading.
- *
- * @return string[]
+ * @param array<string, int> $timeouts
+ * @return array{name: string, greeting: string, voicemail: string, hunting: string, timeouts: array<string, int>}
  */
-function labelsUnder(string $html, string $heading): array
+function overviewSummary(string $greeting = '', string $voicemail = '', array $timeouts = []): array
 {
-    $sections = explode('<section class="tamar-day">', $html);
-    foreach ($sections as $section) {
-        if (str_contains($section, '<h3 class="tamar-day__head">' . $heading . ' ')) {
-            preg_match_all('#<div class="tamar-step__head"><strong>([^<]*)</strong>#', $section, $m);
-            return $m[1];
-        }
-    }
-    return [];
+    return ['name' => 'New Rota', 'greeting' => $greeting, 'voicemail' => $voicemail, 'hunting' => 'Hunt in-order', 'timeouts' => $timeouts];
 }
 
-it('renders every day Monday to Sunday, even empty ones', function () {
-    $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')]);
+/**
+ * Each body row's cells, as text, in table order.
+ *
+ * @return list<list<string>>
+ */
+function overviewRows(string $html): array
+{
+    preg_match_all('#<tr class="tamar-row[^"]*">(.*?)</tr>#s', $html, $rows);
+    $out = [];
+    foreach ($rows[1] as $row) {
+        preg_match_all('#<td[^>]*>(.*?)</td>#s', $row, $cells);
+        $out[] = array_map(static function (string $cell): string {
+            if (str_contains($cell, 'tamar-tick')) {
+                return str_contains($cell, 'tamar-tick--on') ? 'x' : '.';
+            }
+            return trim(html_entity_decode(strip_tags($cell)));
+        }, $cells[1]);
+    }
+    return $out;
+}
 
-    preg_match_all('#<h3 class="tamar-day__head">(\w+)#', $html, $m);
+it('lays a row out in the panel\'s column order', function () {
+    $html = renderOverview(
+        [overviewRule('Steve C', 2, ['mon', 'thu'], '10:00', '14:00')],
+        [new ForwardingTarget(['id' => 'num:2', 'kind' => 'number', 'label' => 'Steve C', 'address' => '01454 898476'])],
+        overviewSummary(timeouts: ['2' => 90]),
+    );
 
-    expect($m[1])->toBe(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-        ->and($html)->toContain('Nothing forwarded on this day.');
+    // order, Su Mo Tu We Th Fr Sa, start, end, VM, destination, comment, timeout, active
+    expect(overviewRows($html))->toBe([
+        ['1', '.', 'x', '.', '.', 'x', '.', '.', '10:00', '14:00', '.', '01454 898476', 'Steve C', '90', 'x'],
+    ]);
 });
 
-it('lists a rule under each day it has ticked', function () {
-    $html = renderOverview([overviewRule('Steve C', 1, ['mon', 'thu'], '10:00', '14:00')]);
-
-    expect(labelsUnder($html, 'Monday'))->toBe(['Steve C'])
-        ->and(labelsUnder($html, 'Thursday'))->toBe(['Steve C'])
-        ->and(labelsUnder($html, 'Tuesday'))->toBe([]);
-});
-
-it('orders a day by start time, not hunt order', function () {
+it('lists rows in hunt order and numbers them from one', function () {
     $html = renderOverview([
-        overviewRule('Evening', 1, ['mon'], '18:00', '22:00'),
-        overviewRule('Morning', 2, ['mon'], '08:00', '12:00'),
+        overviewRule('Second', 7, ['mon'], '08:00', '12:00'),
+        overviewRule('First', 3, ['mon'], '18:00', '22:00'),
     ]);
 
-    expect(labelsUnder($html, 'Monday'))->toBe(['Morning', 'Evening']);
+    $rows = overviewRows($html);
+    expect(array_column($rows, 0))->toBe(['1', '2'])
+        ->and(array_column($rows, 12))->toBe(['First', 'Second']);
 });
 
-it('breaks a tie on start time by hunt order', function () {
-    $html = renderOverview([
-        overviewRule('Backup', 5, ['tue'], '09:00', '17:00'),
-        overviewRule('First', 2, ['tue'], '09:00', '17:00'),
-    ]);
+it('ticks VM and says voicemail for a row that diverts to the voicemail box', function () {
+    $html = renderOverview(
+        [new ForwardingRule([
+            'id' => '1',
+            'priority' => 1,
+            'label' => '',
+            'match' => ['type' => 'time_window', 'value' => ['days' => ['mon'], 'from' => '00:00', 'to' => '10:00']],
+            'target_id' => 'vm:20042',
+        ])],
+        [new ForwardingTarget(['id' => 'vm:20042', 'kind' => 'voicemail', 'label' => 'Voice to Email', 'address' => '20042'])],
+    );
 
-    expect(labelsUnder($html, 'Tuesday'))->toBe(['First', 'Backup']);
+    $row = overviewRows($html)[0];
+    expect($row[10])->toBe('x')
+        ->and($row[11])->toBe('voicemail')
+        // An empty comment shows the panel's placeholder, greyed.
+        ->and($row[12])->toBe('Description or comment')
+        ->and($html)->toContain('tamar-pill tamar-pill--comment tamar-pill--empty');
 });
 
-it('shows the time window in the time column', function () {
-    $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')]);
+it('dims an inactive row and leaves Active unticked', function () {
+    $html = renderOverview([overviewRule('Jo W', 4, ['thu'], '18:00', '22:00', false)]);
 
-    expect($html)->toContain('<span class="tamar-step__time">10:00–14:00</span>');
+    expect($html)->toContain('<tr class="tamar-row tamar-row--off">')
+        ->and(overviewRows($html)[0][14])->toBe('.');
 });
 
-it('puts a catchall under all seven days as all day', function () {
+it('ticks every day of a catchall, all day', function () {
     $html = renderOverview([
         new ForwardingRule(['id' => '9', 'priority' => 9, 'label' => 'Anyone', 'match' => ['type' => 'any'], 'target_id' => 'q:1']),
     ]);
 
-    foreach (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day) {
-        expect(labelsUnder($html, $day))->toBe(['Anyone']);
-    }
-    expect($html)->toContain('<span class="tamar-step__time">All day</span>')
-        ->and($html)->not->toContain('Not scheduled by day');
+    expect(array_slice(overviewRows($html)[0], 1, 9))
+        ->toBe(['x', 'x', 'x', 'x', 'x', 'x', 'x', '00:00', '23:59']);
 });
 
-it('keeps a window with no days ticked out of the week, rather than guessing', function () {
-    $html = renderOverview([overviewRule('Nobody', 3, [], '10:00', '14:00')]);
-
-    expect(labelsUnder($html, 'Not scheduled by day'))->toBe(['Nobody'])
-        ->and(labelsUnder($html, 'Monday'))->toBe([])
-        ->and($html)->toContain('No days ticked · 10:00–14:00');
-});
-
-it('keeps a match type that is not about time out of the week', function () {
+it('ticks no days and shows no times for a match that is not about time', function () {
     $html = renderOverview([
         new ForwardingRule([
             'id' => '4',
@@ -123,33 +136,53 @@ it('keeps a match type that is not about time out of the week', function () {
         ]),
     ]);
 
-    expect(labelsUnder($html, 'Not scheduled by day'))->toBe(['VIP'])
-        ->and($html)->toContain('Match: source_number');
+    expect(array_slice(overviewRows($html)[0], 1, 9))
+        ->toBe(['.', '.', '.', '.', '.', '.', '.', '—', '—']);
 });
 
-it('counts active rules once, however many days they cover', function () {
-    $html = renderOverview([
-        overviewRule('Steve C', 1, ['mon', 'tue', 'wed'], '10:00', '14:00'),
-        overviewRule('Off', 2, ['mon'], '14:00', '18:00', false),
-    ]);
+it('falls back to the raw target id when the target is unknown', function () {
+    $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')]);
 
-    expect($html)->toContain('1 active step');
+    expect(overviewRows($html)[0][11])->toBe('num:1');
 });
 
-it('still shows the voicemail fall-through once, after the days', function () {
+it('shows the group settings across the top', function () {
+    $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')], [], overviewSummary(voicemail: 'Voice to Email'));
+
+    expect($html)->toContain('<legend class="tamar-card__legend">Hunt Group New Rota</legend>')
+        ->and($html)->toContain('<p>Announcement</p><span class="tamar-pill">None</span>')
+        ->and($html)->toContain('<p>Voicemail</p><span class="tamar-pill">Voice to Email</span>')
+        ->and($html)->toContain('<p>Hunting type</p><span class="tamar-pill">Hunt in-order</span>');
+});
+
+it('puts the announcement notice above the rows and the voicemail notice below', function () {
     $html = renderOverview(
-        [
-            new ForwardingRule([
-                'id' => '1',
-                'priority' => 1,
-                'label' => 'Out of hours',
-                'match' => ['type' => 'time_window', 'value' => ['days' => ['sat', 'sun'], 'from' => '00:00', 'to' => '23:59']],
-                'target_id' => 'vm:20042',
-            ]),
-        ],
-        [new ForwardingTarget(['id' => 'vm:20042', 'kind' => 'voicemail', 'label' => 'Voice to Email', 'address' => '20042'])]
+        [overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')],
+        [],
+        overviewSummary(greeting: 'AI-Answerphone Message', voicemail: 'Voice to Email'),
     );
 
-    expect(substr_count($html, 'tamar-step--tail'))->toBe(1)
-        ->and(strpos($html, 'tamar-step--tail'))->toBeGreaterThan(strrpos($html, 'tamar-day__head'));
+    $row = strpos($html, '<tr class="tamar-row');
+    expect(strpos($html, 'Announcement will be played'))->toBeLessThan($row)
+        ->and(strpos($html, 'Voicemail is enabled if calls are not answered.'))->toBeGreaterThan($row);
+});
+
+it('leaves out both notices when there is no announcement or voicemail', function () {
+    $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')], [], overviewSummary());
+
+    expect($html)->not->toContain('tamar-notice');
+});
+
+it('still renders the table without a summary, for a driver that cannot give one', function () {
+    $html = renderOverview([overviewRule('Steve C', 1, ['mon'], '10:00', '14:00')]);
+
+    expect($html)->not->toContain('tamar-settings')
+        ->and($html)->not->toContain('tamar-notice')
+        ->and($html)->toContain('<legend class="tamar-card__legend">Hunt Group</legend>')
+        ->and(overviewRows($html)[0][13])->toBe('—');
+});
+
+it('says so when there are no rules', function () {
+    expect(renderOverview([]))->toContain('No forwarding rules configured')
+        ->and(renderOverview([]))->not->toContain('<table');
 });

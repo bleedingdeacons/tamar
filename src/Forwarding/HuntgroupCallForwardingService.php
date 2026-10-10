@@ -375,6 +375,56 @@ final class HuntgroupCallForwardingService extends AbstractCallForwardingService
     }
 
     /**
+     * The configured hunt group's own settings and each row's ring
+     * timeout, for the Overview — the parts of the panel's page that
+     * Beacon's contract has no getter for. Labels are as the panel shows
+     * them; an announcement or voicemail of "none" is ''. Timeouts are
+     * keyed by rule id. Read only, and served from the page listRules()
+     * already loaded.
+     *
+     * @return array{name: string, greeting: string, voicemail: string, hunting: string, timeouts: array<string, int>}
+     * @throws ForwardingException
+     */
+    public function huntgroupSummary(): array
+    {
+        $state = $this->load();
+        $meta = $state['meta'];
+
+        $timeouts = [];
+        foreach ($state['rules'] as $row) {
+            $raw = is_array($row['_raw'] ?? null) ? $row['_raw'] : [];
+            $timeouts[(string) ($row['id'] ?? '')] = (int) ($raw['timeout'] ?? 0);
+        }
+
+        $hunting = (string) ($meta['hunting'] ?? '');
+
+        return [
+            'name' => (string) ($meta['name'] ?? ''),
+            'greeting' => self::optionLabel($meta['greetings_available'] ?? [], (string) ($meta['greeting'] ?? '')),
+            'voicemail' => self::optionLabel($meta['voicemails_available'] ?? [], (string) ($meta['voicemail'] ?? '')),
+            'hunting' => HuntgroupDefaults::HUNTING_TYPES[$hunting] ?? $hunting,
+            'timeouts' => $timeouts,
+        ];
+    }
+
+    /**
+     * A select's label for a value, '' for none, or the value itself
+     * when the list does not offer it.
+     */
+    private static function optionLabel(mixed $options, string $value): string
+    {
+        if ($value === '' || $value === HuntgroupDefaults::NONE) {
+            return '';
+        }
+        foreach (self::optionList($options) as $option) {
+            if ($option['id'] === $value) {
+                return $option['label'];
+            }
+        }
+        return $value;
+    }
+
+    /**
      * @return list<array{id:string,label:string}>
      */
     private static function optionList(mixed $options): array
